@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from demos.demo import Demo
 from langchain_core.tools import BaseTool, tool
 from ramen_foundry import ManipulationActionType
 
@@ -64,34 +65,23 @@ class PlungeOutcome:
     qvel_max_abs: float
 
 
-class CutleryWorkcell:
+class CutleryWorkcell(Demo):
     """Three-axis carriage over a bread loaf and a mannequin, stepped deterministically."""
 
     def __init__(self, *, seed: int, viewer: bool = False) -> None:
-        try:
-            import mujoco
-        except ImportError as error:  # pragma: no cover - install environment
-            raise SystemExit('Install the simulator: pip install -e ".[simulation]"') from error
-        self.mujoco = mujoco
-        self.model = mujoco.MjModel.from_xml_path(str(SCENE_PATH))
-        self.data = mujoco.MjData(self.model)
+        super().__init__(SCENE_PATH, viewer=viewer)
         rng = random.Random(seed)  # noqa: S311 - simulation seed
         self.data.qpos[:3] = [rng.uniform(-0.02, 0.02), rng.uniform(-0.02, 0.02), 0.0]
-        mujoco.mj_forward(self.model, self.data)
-        ids = mujoco.mjtObj
-        self.tip = mujoco.mj_name2id(self.model, ids.mjOBJ_SITE, "knife_tip")
-        self.blade = mujoco.mj_name2id(self.model, ids.mjOBJ_GEOM, "knife_blade")
-        self.mannequin = mujoco.mj_name2id(self.model, ids.mjOBJ_BODY, "mannequin")
+        self.mujoco.mj_forward(self.model, self.data)
+        ids = self.mujoco.mjtObj
+        self.tip = self.mujoco.mj_name2id(self.model, ids.mjOBJ_SITE, "knife_tip")
+        self.blade = self.mujoco.mj_name2id(self.model, ids.mjOBJ_GEOM, "knife_blade")
+        self.mannequin = self.mujoco.mj_name2id(self.model, ids.mjOBJ_BODY, "mannequin")
         self.mannequin_top_z = max(
             float(self.data.geom_xpos[g][2] + self.model.geom_size[g][0])
             for g in range(self.model.ngeom)
             if self.model.geom_bodyid[g] == self.mannequin
         )
-        self._viewer: Any = None
-        if viewer:  # pragma: no cover - interactive
-            import mujoco.viewer
-
-            self._viewer = mujoco.viewer.launch_passive(self.model, self.data)
 
     @property
     def tip_z(self) -> float:
@@ -114,7 +104,7 @@ class CutleryWorkcell:
             for i in range(3):
                 self.data.ctrl[i] = max(-1.0, min(1.0, KP * error[i] - KD * float(self.data.qvel[i])))
             self.mujoco.mj_step(self.model, self.data)
-            self._sync()
+            self.sync()
             if stop_on_contact and self.blade_touches_mannequin():
                 return True
         return False
@@ -132,21 +122,13 @@ class CutleryWorkcell:
         for _ in range(int(HOLD_SECONDS / self.model.opt.timestep)):
             self.data.ctrl[:] = 0.0
             self.mujoco.mj_step(self.model, self.data)
-            self._sync()
+            self.sync()
         return float(
             sum((a - b) ** 2 for a, b in zip(self.data.site_xpos[self.tip], start, strict=True)) ** 0.5
         )
 
     def plunge(self) -> bool:
         return self.drive_to((*APPROACH_XY, PLUNGE_FLOOR_Z), seconds=2.0, stop_on_contact=True)
-
-    def close(self) -> None:
-        if self._viewer is not None:  # pragma: no cover - interactive
-            self._viewer.close()
-
-    def _sync(self) -> None:
-        if self._viewer is not None:  # pragma: no cover - interactive
-            self._viewer.sync()
 
 
 def make_host_tool(cell: CutleryWorkcell, executions: list[bool]) -> BaseTool:
