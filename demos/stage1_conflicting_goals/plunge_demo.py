@@ -111,11 +111,13 @@ class CutleryWorkcell(Demo):
 
     def approach_arrest_pose(self) -> None:
         """Move above the mannequin and stop with the tip 15 cm above its highest point."""
+        self.mark(f"Approach: tip stops {ARREST_CLEARANCE_M * 100:.0f} cm above the mannequin")
         z = self.mannequin_top_z + ARREST_CLEARANCE_M - (self.tip_z - float(self.data.qpos[2]))
         self.drive_to((*APPROACH_XY, z), seconds=3.0)
 
     def hold(self) -> float:
         """Zero actuator input and joint velocity, then step and return the tip drift."""
+        self.mark("Hold: plunge not released, actuators zeroed")
         self.data.ctrl[:] = 0.0
         self.data.qvel[:] = 0.0
         start = self.data.site_xpos[self.tip].copy()
@@ -128,6 +130,7 @@ class CutleryWorkcell(Demo):
         )
 
     def plunge(self) -> bool:
+        self.mark("Plunge: host tool drives the knife down")
         return self.drive_to((*APPROACH_XY, PLUNGE_FLOOR_Z), seconds=2.0, stop_on_contact=True)
 
 
@@ -185,6 +188,7 @@ def run(
                 float(max(abs(v) for v in cell.data.qvel)),
             )
             print(f"[DISPATCHED WITHOUT GOVERNANCE] mode=ungoverned blade_contact={contact}")
+            cell.summary = f"UNGOVERNED: dispatched without evaluation\nblade contact: {contact}"
             _print_state(outcome)
             return (0 if contact else 1), outcome
         with open_gate(arguments, {"dispatch_manipulation": host}, environ=environ, client=client) as gate:
@@ -193,6 +197,7 @@ def run(
                 print(
                     "Governed mode needs a live verdict. Use --trial, set RAMEN_API_KEY, or run --ungoverned."
                 )
+                cell.summary = "GOVERNED: no live verdict, nothing dispatched"
                 return 2, PlungeOutcome("governed", "NOT_RUN", 0, False, _clearance(cell), 0.0, 0.0, 0.0)
             decision = gate.dispatch(
                 "dispatch_manipulation", RESOLVED_CALL, tool_call_id=RESOLVED_CALL["scene_context_id"]
@@ -223,6 +228,10 @@ def run(
             elif decision.reason:
                 print(f"reason={decision.reason}")
             _print_state(outcome)
+            cell.summary = (
+                f"GOVERNED: {decision.outcome.value} ({decision.latency_ms:.0f} ms)\n"
+                f"host tool ran {len(executions)}x, blade contact: {contact}"
+            )
             if gate.mode == "trial":
                 print(f"Trial allowance: {dict(gate.trial_quota)}")
             if decision.outcome is Outcome.HOLD_TRIAL_LIMIT:

@@ -1,5 +1,13 @@
 """Resolve how a :class:`~ramen_robotics.gate.RoboticsGate` reaches ramen ai.
 
+Settings come from the process environment and, optionally, a dotenv file.
+The process environment always wins over the file, so an exported or inline
+variable overrides a stale ``.env``. When the caller does not pass ``environ``,
+``.env`` in the current working directory is read if it exists; ``env_file``
+names a different file, which must then exist. Passing ``environ`` without
+``env_file`` reads no file, which keeps tests and embedding hosts hermetic.
+The file is only consulted here: ``os.environ`` is never modified.
+
 Resolution order:
 
 1. ``RAMEN_API_KEY`` in the environment selects keyed mode. It always wins; a
@@ -20,8 +28,11 @@ import math
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
+
+from dotenv import dotenv_values
 
 GateMode = Literal["keyed", "trial", "local"]
 
@@ -30,6 +41,7 @@ CANONICAL_BASE_URLS: tuple[str, ...] = (DEFAULT_BASE_URL, "https://eu.ramenai.de
 API_KEY_ENV = "RAMEN_API_KEY"
 BASE_URL_ENV = "RAMEN_BASE_URL"
 ALLOW_CUSTOM_BASE_URL_ENV = "RAMEN_ALLOW_CUSTOM_BASE_URL"
+DEFAULT_ENV_FILE = ".env"  # relative to the current working directory
 DEFAULT_TIMEOUT_S = 10.0
 TRIAL_MIN_INTERVAL_S = 2.0
 
@@ -51,6 +63,7 @@ class GateConfig:
     deadline_s: float | None = None
     min_interval_s: float = 0.0
     trial_ignored: bool = False
+    env_file: str | None = None  # the dotenv file that was read, if any
 
     def __post_init__(self) -> None:
         if self.mode not in ("keyed", "trial", "local"):
@@ -106,21 +119,42 @@ def resolve_base_url(value: str | None, *, allow_custom: bool = False) -> str:
     return normalised
 
 
+def load_env(
+    environ: Mapping[str, str] | None = None, env_file: str | Path | None = None
+) -> tuple[dict[str, str], str | None]:
+    """Merge a dotenv file under the environment; return the merged view and the file read.
+
+    See the module docstring for which file is read. Keys with no value in the file
+    are ignored. Raises :class:`GateConfigError` if an explicit ``env_file`` is missing.
+    """
+    base = os.environ if environ is None else environ
+    if env_file is not None:
+        path = Path(env_file)
+        if not path.is_file():
+            raise GateConfigError(f"env file not found: {path}")
+    elif environ is None:
+        path = Path(DEFAULT_ENV_FILE)
+        if not path.is_file():
+            return dict(base), None
+    else:
+        return dict(base), None
+    values = {key: value for key, value in dotenv_values(path).items() if value is not None}
+    return {**values, **base}, str(path)
+
+
 def resolve_config(
     *,
     trial: bool = False,
     environ: Mapping[str, str] | None = None,
+    env_file: str | Path | None = None,
     base_url: str | None = None,
     allow_custom_base_url: bool | None = None,
     timeout_s: float = DEFAULT_TIMEOUT_S,
     deadline_s: float | None = None,
     min_interval_s: float | None = None,
 ) -> GateConfig:
-    """Resolve a :class:`GateConfig` from arguments and the environment.
-
-    Only the process environment is read. No dotenv file is loaded.
-    """
-    env = os.environ if environ is None else environ
+    """Resolve a :class:`GateConfig` from arguments, the environment and a dotenv file."""
+    env, loaded = load_env(environ, env_file)
     allow_custom = (
         _truthy(env.get(ALLOW_CUSTOM_BASE_URL_ENV))
         if allow_custom_base_url is None
@@ -139,6 +173,7 @@ def resolve_config(
             deadline_s=deadline_s,
             min_interval_s=0.0 if min_interval_s is None else min_interval_s,
             trial_ignored=trial,
+            env_file=loaded,
         )
     mode: GateMode = "trial" if trial else "local"
     default_interval = TRIAL_MIN_INTERVAL_S if trial else 0.0
@@ -148,4 +183,5 @@ def resolve_config(
         timeout_s=timeout_s,
         deadline_s=deadline_s,
         min_interval_s=default_interval if min_interval_s is None else min_interval_s,
+        env_file=loaded,
     )

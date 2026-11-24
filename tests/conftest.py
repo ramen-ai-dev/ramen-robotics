@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 
 import pytest
 import ramen_foundry.core.receipts as foundry_receipts
 
+import ramen_robotics.gate.config as gate_config
 from tests.fakes import TEST_PUBLIC_KEYS
 
 _GATE_ENV = ("RAMEN_API_KEY", "RAMEN_BASE_URL", "RAMEN_ALLOW_CUSTOM_BASE_URL", "RAMEN_SHADOW_MODE")
@@ -44,3 +46,9 @@ def _isolate_gate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep a developer's credentials and endpoint overrides out of every test."""
     for name in _GATE_ENV:
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_env_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Never read a developer's ./.env; point the default at a file that does not exist."""
+    monkeypatch.setattr(gate_config, "DEFAULT_ENV_FILE", str(tmp_path / "absent.env"))

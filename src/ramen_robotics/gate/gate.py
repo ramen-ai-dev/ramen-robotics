@@ -21,6 +21,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Any, Protocol, cast
 
 from langchain_core.tools import BaseTool
@@ -183,6 +184,7 @@ class RoboticsGate:
         *,
         trial: bool = False,
         environ: Mapping[str, str] | None = None,
+        env_file: str | Path | None = None,
         timeout_s: float = 10.0,
         deadline_s: float | None = None,
         min_interval_s: float | None = None,
@@ -194,6 +196,7 @@ class RoboticsGate:
         config = resolve_config(
             trial=trial,
             environ=environ,
+            env_file=env_file,
             allow_custom_base_url=allow_custom_base_url,
             timeout_s=timeout_s,
             deadline_s=deadline_s,
