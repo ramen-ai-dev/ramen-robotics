@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Credentials and local configuration
+.env
+.env.*
+*.pem
+*.key
+
+# Run output
+out/
+*.jsonl
+recordings/
+MUJOCO_LOG.TXT
+
+# Media and heavy binaries (see assets/README.md)
+*.mp4
+*.mov
+*.avi
+*.webm
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/

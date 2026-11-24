@@ -1,0 +1,40 @@
+name: Demo proposal
+description: Propose a demo or benchmark. Every demo builds on a reusable module under src/ramen_robotics/.
+labels: [demo]
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Scenario
+      description: The task, the hazard (or the safe control) and the expected gate outcome for each dispatch.
+    validations:
+      required: true
+  - type: input
+    id: module
+    attributes:
+      label: Module it builds on
+      description: An existing module (for example `ramen_robotics.gate`) or the RFC that introduces a new one.
+      placeholder: ramen_robotics.gate
+    validations:
+      required: true
+  - type: input
+    id: calls
+    attributes:
+      label: Live calls per run
+      description: The keyless trial allows about 10 requests per day per network. Keep `--trial` runs small.
+    validations:
+      required: true
+  - type: textarea
+    id: assets
+    attributes:
+      label: Assets
+      description: Scenes must be text (MJCF, URDF, SDF) built from primitives or meshes with a stated license and source, each file under 256 KB. No video or binary media in git.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: The demo runs offline in tests against a fake server (no network).
+          required: true
+        - label: The demo imports ramen foundry classes rather than copying them.
+          required: true

@@ -1,0 +1,7 @@
+ramen robotics
+Copyright 2026 ramen ai
+
+This product includes software developed by ramen ai (https://ramenai.dev).
+
+ramen robotics depends on ramen foundry (https://github.com/ramen-ai-dev/ramen-foundry)
+and ramen-ai-core, which are distributed separately under their own licenses.

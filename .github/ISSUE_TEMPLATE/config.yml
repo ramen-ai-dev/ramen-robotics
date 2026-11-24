@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Onboarding guide
+    url: https://github.com/ramen-ai-dev/ramen-robotics/blob/main/docs/ONBOARDING.md
+    about: Install, quickstart, the RoboticsGate contract and integration patterns.
+  - name: ramen ai documentation index
+    url: https://ramenai.dev/llms.txt
+    about: API, bundles and receipts.

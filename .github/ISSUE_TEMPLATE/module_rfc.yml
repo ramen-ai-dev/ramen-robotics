@@ -1,0 +1,43 @@
+name: Module RFC
+description: Propose or claim a contributor-owned module (vla_guard, workcell_gate, ros2_bridge, mission_and_data or a new one).
+labels: [rfc]
+body:
+  - type: dropdown
+    id: module
+    attributes:
+      label: Module
+      options:
+        - "vla_guard (RFC 0001)"
+        - "workcell_gate (RFC 0002)"
+        - "ros2_bridge (RFC 0003)"
+        - "mission_and_data (RFC 0004)"
+        - new module
+    validations:
+      required: true
+  - type: textarea
+    id: interface
+    attributes:
+      label: Public interface
+      description: Classes, functions and the GateDecision outcomes each path can produce.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: placement
+    attributes:
+      label: Placement and timing
+      description: Where the module sits between planner, gate and controller, its latency budget, and what it does when the gate holds.
+    validations:
+      required: true
+  - type: textarea
+    id: tests
+    attributes:
+      label: Test plan
+      description: Offline tests against the fake server, plus any opt-in `live` tests and their call count.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: New dependencies
+      description: Each new dependency as an optional extra, with its license.

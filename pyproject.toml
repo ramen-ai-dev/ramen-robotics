@@ -1,0 +1,79 @@
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ramen-robotics"
+version = "0.1.0"
+description = "Signed task-dispatch gate, demos and contributor modules for governed robotics, built on ramen foundry."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+keywords = ["robotics", "governance", "mujoco", "ros2", "vla", "ed25519"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+# langchain-core and langgraph arrive pinned through ramen-foundry.
+dependencies = [
+    "ramen-foundry>=0.2.8,<0.3",
+    "ramen-ai-core>=0.3.5,<0.5",
+]
+
+[project.optional-dependencies]
+simulation = ["ramen-foundry[simulation]>=0.2.8,<0.3"]
+data = ["ramen-foundry[data]>=0.2.8,<0.3"]
+dev = [
+    "pytest==9.2.0",
+    "ruff==0.17.6",
+    "mypy==2.4.1",
+]
+
+[project.urls]
+Homepage = "https://ramenai.dev"
+Documentation = "https://github.com/ramen-ai-dev/ramen-robotics/blob/main/docs/ONBOARDING.md"
+Repository = "https://github.com/ramen-ai-dev/ramen-robotics"
+Issues = "https://github.com/ramen-ai-dev/ramen-robotics/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ramen_robotics"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [".github", "docs/brand"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-m 'not live'"
+markers = [
+    "live: opt-in tests against api.ramenai.dev; set RAMEN_LIVE_TESTS=1 and run with -m live. Never run in CI.",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+src = ["src", "tests", "demos", ".github/scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+ignore = ["S101", "E501"]  # ruff format owns line length
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["ramen_foundry", "ramen_foundry.*"]
+ignore_missing_imports = true
+follow_untyped_imports = true

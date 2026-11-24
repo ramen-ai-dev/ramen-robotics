@@ -1,0 +1,41 @@
+name: Bug report
+description: A gate, demo or test behaves differently from the documentation.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste an API key, a `.env` file or a provider key. Receipts and evaluated text are fine to share.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran, the output you got and the output you expected.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Gate mode
+      options: [local, trial (--trial), keyed (RAMEN_API_KEY), not applicable]
+    validations:
+      required: true
+  - type: input
+    id: outcome
+    attributes:
+      label: GateDecision outcome and receipt id
+      placeholder: "BLOCKED, receipt trial_..."
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `python -c "import sys, ramen_robotics, ramen_foundry; print(sys.version, ramen_robotics.__version__, ramen_foundry.__version__)"`
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+    validations:
+      required: true

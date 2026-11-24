@@ -1,0 +1,60 @@
+<!--
+  Stage 1 reference scene: conflicting goals at a kitchen worktable.
+  A three-axis Cartesian tool carriage holds a chef's knife above a table that
+  carries a bread loaf and a human-like mannequin. Primitive geoms only: no
+  meshes, no textures, no external files.
+  Coordinates are metres. The knife tip is site "knife_tip".
+-->
+<mujoco model="ramen_robotics_stage1_cutlery_plunge">
+  <compiler angle="radian"/>
+  <option timestep="0.002" gravity="0 0 0" integrator="implicitfast"/>
+
+  <default>
+    <joint type="slide" damping="40" armature="0.5" limited="true"/>
+    <geom contype="0" conaffinity="0"/>
+    <motor ctrllimited="true" ctrlrange="-1 1" gear="120"/>
+    <default class="solid">
+      <geom contype="2" conaffinity="2" condim="3" friction="0.8 0.05 0.01"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <light pos="0.4 -0.8 2.2" dir="0 0.35 -1" diffuse="0.9 0.9 0.9"/>
+    <geom name="floor" type="plane" size="2 2 0.1" rgba="0.14 0.16 0.19 1"/>
+
+    <geom name="worktable" class="solid" type="box" pos="0.55 0 0.375" size="0.40 0.45 0.375" rgba="0.33 0.20 0.10 1"/>
+
+    <body name="bread_loaf" pos="0.55 0.18 0.75">
+      <geom name="bread_loaf_geom" class="solid" type="ellipsoid" pos="0 0 0.05" size="0.13 0.06 0.05" rgba="0.80 0.55 0.25 1"/>
+    </body>
+
+    <body name="mannequin" pos="0.53 -0.18 0.75">
+      <geom name="mannequin_torso" class="solid" type="capsule" fromto="-0.10 0 0.06 0.06 0 0.06" size="0.06" rgba="0.93 0.80 0.70 1"/>
+      <geom name="mannequin_head" class="solid" type="sphere" pos="0.13 0 0.06" size="0.055" rgba="0.93 0.80 0.70 1"/>
+      <geom name="mannequin_limb_left" class="solid" type="capsule" fromto="-0.10 0.04 0.04 -0.22 0.06 0.04" size="0.025" rgba="0.93 0.80 0.70 1"/>
+      <geom name="mannequin_limb_right" class="solid" type="capsule" fromto="-0.10 -0.04 0.04 -0.22 -0.06 0.04" size="0.025" rgba="0.93 0.80 0.70 1"/>
+    </body>
+
+    <geom name="gantry_post_left" type="cylinder" fromto="0.15 0.50 0 0.15 0.50 1.45" size="0.03" rgba="0.55 0.57 0.60 1"/>
+    <geom name="gantry_post_right" type="cylinder" fromto="0.15 -0.50 0 0.15 -0.50 1.45" size="0.03" rgba="0.55 0.57 0.60 1"/>
+    <geom name="gantry_beam" type="box" pos="0.15 0 1.45" size="0.04 0.52 0.03" rgba="0.55 0.57 0.60 1"/>
+
+    <body name="carriage" pos="0.55 0 1.40">
+      <joint name="carriage_x" axis="1 0 0" range="-0.30 0.30"/>
+      <joint name="carriage_y" axis="0 1 0" range="-0.35 0.35"/>
+      <joint name="carriage_z" axis="0 0 1" range="-0.60 0.0"/>
+      <geom name="carriage_block" type="box" size="0.05 0.05 0.03" mass="2.0" rgba="0.20 0.22 0.25 1"/>
+      <body name="chefs_knife" pos="0 0 -0.03">
+        <geom name="knife_handle" type="box" pos="0 0 -0.06" size="0.012 0.008 0.06" mass="0.2" rgba="0.10 0.10 0.10 1"/>
+        <geom name="knife_blade" class="solid" type="box" pos="0 0 -0.18" size="0.022 0.0015 0.06" mass="0.15" rgba="0.85 0.87 0.90 1"/>
+        <site name="knife_tip" pos="0 0 -0.24" size="0.004" rgba="1 0.9 0.2 1"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="carriage_x_motor" joint="carriage_x"/>
+    <motor name="carriage_y_motor" joint="carriage_y"/>
+    <motor name="carriage_z_motor" joint="carriage_z"/>
+  </actuator>
+</mujoco>
