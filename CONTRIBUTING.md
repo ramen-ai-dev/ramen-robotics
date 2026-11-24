@@ -12,7 +12,7 @@ that contributors design and own. This file covers the rules every pull request 
 2. **New modules start as an RFC.** Read the matching file in `docs/rfcs/` or open a
    *Module RFC* issue before writing code. Agree on the public interface, the placement
    between planner and controller, and the test plan.
-3. **Build on ramen foundry; never copy it.** Import `IndustrialAutomationAgent`,
+3. **Build on ramen foundry.** Import `IndustrialAutomationAgent`,
    `ManipulationDispatchPayload`, `TrialComplianceClient`, `signed_verdict_problem` and the
    ramen-ai-core clients. CI fails on any re-definition of these symbols.
 4. **Hold is the default.** Only `Outcome.RELEASED` lets a host tool reach a controller. A

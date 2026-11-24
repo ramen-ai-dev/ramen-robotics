@@ -44,6 +44,9 @@ Issues = "https://github.com/ramen-ai-dev/ramen-robotics/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ramen_robotics"]
+# Editable installs also put the repo root on sys.path so demo scripts can
+# `from demos.demo import Demo`. Built wheels still ship only ramen_robotics.
+dev-mode-dirs = ["src", "."]
 
 [tool.hatch.build.targets.sdist]
 exclude = [".github", "docs/brand"]
