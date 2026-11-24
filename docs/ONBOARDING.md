@@ -42,7 +42,14 @@ python -c "import ramen_robotics, ramen_foundry; print(ramen_robotics.__version_
 | `RAMEN_ALLOW_CUSTOM_BASE_URL` | Set to `1` to accept any other `https://` origin in `RAMEN_BASE_URL`. |
 | `CI` | Any non-empty value forces the MuJoCo demo into headless mode. |
 
-No dotenv file is read. Export variables in the shell or inject them from your secret manager.
+Set these in the shell, inject them from your secret manager, or put them in a `.env` file in the directory you run from:
+
+```bash
+# .env (gitignored; never commit it)
+RAMEN_API_KEY="<your ramen ai api key>"
+```
+
+`./.env` is read when it exists; pass `--env-file PATH` to a demo to read another file instead (it must exist). Exported variables always win over the file, and the file never changes the process environment. The mode line printed by each demo names the env file it read. When code passes `environ=` to `resolve_config`, `open_gate` or `RoboticsGate.from_env`, no `.env` is read unless `env_file=` is also given.
 
 ## 2. Demos
 

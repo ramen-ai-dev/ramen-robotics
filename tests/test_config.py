@@ -94,7 +94,8 @@ def _env_file(tmp_path: Path, text: str) -> Path:
 
 def test_env_file_supplies_key_and_base_url(tmp_path: Path) -> None:
     path = _env_file(
-        tmp_path, '# local secrets\nexport RAMEN_API_KEY="<from-file>"\nRAMEN_BASE_URL=https://eu.ramenai.dev\n'
+        tmp_path,
+        '# local secrets\nexport RAMEN_API_KEY="<from-file>"\nRAMEN_BASE_URL=https://eu.ramenai.dev\n',
     )
     config = resolve_config(environ={}, env_file=path)
     assert config.mode == "keyed" and config.api_key == "<from-file>"
