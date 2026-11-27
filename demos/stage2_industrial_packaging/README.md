@@ -90,3 +90,47 @@ mapping is open in [RFC 0002](../../docs/rfcs/0002-workcell-gate.md).
 Trial receipts (`trial_<uuid>`) verify under the pinned key but come from the shared public
 allowance, so export refuses them unless `--allow-trial-dossier` is passed; the dossier is then
 labeled `evidence_class: trial`. Records you keep come from keyed runs.
+
+## Workcell monitor (browser)
+
+`workcell_monitor.py` serves the same nine rows as a control-room page on `127.0.0.1`. It
+draws `CELL-PACK-03` in plan view (conveyor, freezer tunnel at -18 °C, infeed light curtain,
+tray camera confidence and `OPTICS_FOGGED`, mounted and required gripper, allergen
+changeover, operator separation against the collaborative zone), steps through the rows,
+shows each outcome with its finding codes, latency, ramen ai steering directive and Schema V5
+receipt, and exports and re-verifies the dossier with one click.
+
+```bash
+python demos/stage2_industrial_packaging/workcell_monitor.py --open                 # --local (default), 0 requests
+python demos/stage2_industrial_packaging/workcell_monitor.py --trial --open         # rows 7-9 live on click, keyless
+RAMEN_API_KEY=... python demos/stage2_industrial_packaging/workcell_monitor.py --keyed --open
+```
+
+| Mode | Rows 1-6 | Rows 7-9 | Dossier |
+|---|---|---|---|
+| `--local` | local checks | not evaluated, live required | receipt counts 0, labeled local checks only |
+| `--trial` | local checks | one keyless trial request per click, spaced at least 2 s apart; the header shows the reported trial allowance | refused unless `--allow-trial-dossier`, then `evidence_class: trial` |
+| `--keyed` | local checks | one request per click with `RAMEN_API_KEY`, production receipts | `evidence_class: production` |
+
+`--local` and `--trial` never read or send `RAMEN_API_KEY`, even when it is set. `--keyed`
+exits with status 2 when it is missing.
+
+Auto-play runs rows 1 to 6 and pauses before each live row, so every live evaluation is an
+explicit click. Each row runs once per run; **New run** starts over with fresh issuers, a new
+configuration hash and a new run directory under `out/stage2_hmi/` (or `--run-dir`). Each
+export goes to a new `dossier-NN` directory inside the run directory.
+
+Other options: `--port` (default 8765, `0` picks a free port), `--open`, `--allow-trial-dossier`.
+
+The server uses the Python standard library and three local files in `hmi/` (HTML with inline
+SVG, CSS, JavaScript), with no external fonts, scripts or build step, so it runs offline.
+It binds to `127.0.0.1` only, accepts only `Host: 127.0.0.1:<port>` or `localhost:<port>`,
+and every state-changing request needs a token generated at launch and embedded in the page.
+Responses carry a Content-Security-Policy that allows same-origin scripts and styles only.
+
+| File | Role |
+|---|---|
+| `workcell_monitor.py` | Command line, mode selection, bind and serve |
+| `hmi_session.py` | One run: issuers, profile, gate, journal, row results, cell views, dossier export |
+| `hmi_http.py` | Route table, request checks and the `http.server` adapter |
+| `hmi/index.html`, `hmi/hmi.css`, `hmi/hmi.js` | The page |
