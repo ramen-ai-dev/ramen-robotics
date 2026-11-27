@@ -51,6 +51,7 @@ evaluations per day per network.
 python demos/00_quickstart/kinematic_gate_demo.py --trial
 python demos/00_quickstart/asimov_robotics.py --trial
 python demos/stage1_conflicting_goals/plunge_demo.py --trial --headless
+python demos/stage2_industrial_packaging/packaging_cell_demo.py --trial
 ```
 
 With a key from [ramenai.dev](https://ramenai.dev), export `RAMEN_API_KEY` and drop
@@ -61,6 +62,7 @@ With a key from [ramenai.dev](https://ramenai.dev), export `RAMEN_API_KEY` and d
 | `00_quickstart/kinematic_gate_demo.py` | Three malformed payloads blocked locally, an aerosol canister onto an active burner blocked live, a de-rated bracket transfer released live | 2 |
 | `00_quickstart/asimov_robotics.py` | ASIMOV and RoboHarm cases: thermal, electrical, speed and separation, chemical | 2 on `--trial`, 5 with a key |
 | `stage1_conflicting_goals/plunge_demo.py` | "Cut the bread" resolves to a knife plunge toward a human-like target in a MuJoCo scene; the gate blocks it and the arm holds 15 cm above the target | 1 |
+| `stage2_industrial_packaging/packaging_cell_demo.py` | A food-packaging cell under a rush order: six requests held by local cell checks (tampered order, unverified allergen cleaning, wrong gripper, fogged camera, freezer setpoint, recipe export), a light-curtain mute and a close-approach move blocked live, a compliant batch released, and a tamper-evident dossier | 3 |
 
 ## Use the gate
 
@@ -124,6 +126,7 @@ shared public allowance. `verify_audit_file` reports them unless you pass
 | Path | Contents |
 |---|---|
 | `src/ramen_robotics/gate/` | `RoboticsGate`, receipt checks, release guard, audit trail, scrubbing |
+| `src/ramen_robotics/workcell_gate/` | `WorkcellGate`: cell state contract, workcell pre-checks, hash-chained journal, dossier exporter |
 | `demos/` | Runnable demos; each one builds on a module under `src/ramen_robotics/` |
 | `assets/scenes/` | Text-only MuJoCo scenes built from primitive geoms |
 | `benchmarks/` | Contributor benchmarks |
@@ -138,7 +141,7 @@ new package under `src/ramen_robotics/`.
 | Stage | Module | RFC |
 |---|---|---|
 | 1 | `vla_guard`: System 2 VLM task and skill gate plus a System 1 local kinematic envelope filter over 30 to 200 Hz action chunks | [0001](docs/rfcs/0001-vla-guard.md) |
-| 2 | `workcell_gate`: application and workcell gate anchored to ISO 10218-2:2025 and Regulation (EU) 2023/1230 audit dossiers | [0002](docs/rfcs/0002-workcell-gate.md) |
+| 2 | `workcell_gate` (v1 implemented): application and workcell checks anchored to ISO 10218-2:2025, tamper-evident dossiers for Regulation (EU) 2023/1230 traceability records; PLC, MES and OPC UA state adapters open | [0002](docs/rfcs/0002-workcell-gate.md) |
 | 3 | `ros2_bridge`: ROS 2 action goal interceptor and BehaviorTree precondition ahead of MoveIt 2 and Nav2 | [0003](docs/rfcs/0003-ros2-bridge.md) |
 | 4 | `mission_and_data`: drone and AMR mission gating, trajectory dataset curation | [0004](docs/rfcs/0004-mission-and-data.md) |
 

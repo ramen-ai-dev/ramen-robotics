@@ -16,3 +16,4 @@ Each demo builds on `ramen_robotics.gate` and runs in three modes:
 | [`00_quickstart/`](00_quickstart/) | `kinematic_gate_demo.py` | 2 |
 | [`00_quickstart/`](00_quickstart/) | `asimov_robotics.py` | 2 by default, 1 per case with `--cases` |
 | [`stage1_conflicting_goals/`](stage1_conflicting_goals/) | `plunge_demo.py` (MuJoCo) | 1 |
+| [`stage2_industrial_packaging/`](stage2_industrial_packaging/) | `packaging_cell_demo.py` (workcell gate, dossier) | 3 |
