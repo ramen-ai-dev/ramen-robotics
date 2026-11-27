@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from demos.stage2_industrial_packaging import hmi_http, hmi_session, workcell_monitor
+from demos.stage2_industrial_packaging import hmi_http, hmi_session, hmi_story, workcell_monitor
 from demos.stage2_industrial_packaging.hmi_session import HmiSession, SessionError
 
 from tests.fakes import FAKE_API_KEY, FakeRamenServer
@@ -32,6 +32,7 @@ NEW_FILES = (
     DEMO / "workcell_monitor.py",
     DEMO / "hmi_session.py",
     DEMO / "hmi_http.py",
+    DEMO / "hmi_story.py",
     DEMO / "hmi" / "index.html",
     DEMO / "hmi" / "hmi.css",
     DEMO / "hmi" / "hmi.js",
@@ -133,6 +134,7 @@ def test_trial_session_runs_rows_7_to_9_with_three_requests(tmp_path: Path) -> N
         "unexpected": 0,
         "live_requests": 3,
         "by_outcome": {"LOCAL_BLOCK": 6, "BLOCKED": 2, "RELEASED": 1},
+        "plain": "6 stopped locally \u00b7 2 blocked by ramen ai \u00b7 1 approved & signed",
     }
     receipts = session.receipts_view()
     assert receipts["trial"] == 3 and receipts["production"] == 0 and receipts["all_verified"]
@@ -614,3 +616,200 @@ def test_wording_rules_hold_in_every_new_file() -> None:
         assert not hygiene.DISCLAIMER_PATTERN.search(text), path
         assert not re.search(r"(?i)collaborative robot|\bcobot", text), path
         assert not hygiene.PATH_PATTERN.search(text), path
+
+
+# -- presentation layer: story, layers, run all, spotlight, plain labels ----------
+
+RAW_IDENTIFIERS = (
+    "PLC-FRZ-01",
+    "TIC_FRZ",
+    "R-PN-220",
+    "R-PF-114",
+    "GRP-VAC-02",
+    "GRP-SOFT-04",
+    "WO-2026",
+    "SIS-PACK",
+)
+FINDING_CODES = (
+    *(code.value for code in hmi_session.Outcome),
+    "WORK_ORDER_MISMATCH",
+    "SANITATION_UNVERIFIED",
+    "TOOLING_MISMATCH",
+    "SENSOR_DEGRADED",
+    "PLC_OUT_OF_ENVELOPE",
+    "EGRESS_DENIED",
+    "OPTICS_FOGGED",
+)
+FOCUS = {
+    1: "work_order",
+    2: "sanitation",
+    3: "gripper",
+    4: "tray_camera",
+    5: "freezer",
+    6: "egress",
+    7: "light_curtain",
+    8: "separation",
+}
+
+
+def test_every_step_has_a_plain_story_with_technical_subtext(tmp_path: Path) -> None:
+    session = local_session(tmp_path)
+    for number in range(1, 10):
+        story = session.cell_view(number)["story"]
+        assert set(story) == {"title", "attempt", "risk", "response", "tone", "safe", "technical"}
+        plain = " ".join((story["title"], story["attempt"], story["risk"], story["response"]))
+        assert all(story[key].strip() for key in ("title", "attempt", "risk", "response", "technical"))
+        assert not any(identifier in plain for identifier in RAW_IDENTIFIERS), (number, plain)
+        assert not any(code in plain for code in FINDING_CODES), (number, plain)
+        assert story["safe"] is (number == 9)
+    technical = {n: session.cell_view(n)["story"]["technical"] for n in range(1, 10)}
+    assert "GRP-VAC-02" in technical[3] and "OPTICS_FOGGED" in technical[4] and "PLC-FRZ-01" in technical[5]
+    assert "R-PN-220" in technical[2] and "SIS-PACK-03" in technical[7]
+    attempts = {n: session.cell_view(n)["story"]["attempt"] for n in range(1, 10)}
+    assert "4,800" in attempts[1] and "1,200" in attempts[1]
+    assert "peanut-free" in attempts[2] and "41%" in attempts[4]
+    assert "-12" in attempts[5] and "15 minutes" in attempts[7] and "0.6 m" in attempts[8]
+
+
+def test_story_response_follows_the_outcome(tmp_path: Path) -> None:
+    local = local_session(tmp_path / "local")
+    assert local.cell_view(1)["story"]["tone"] == "pending"
+    for number in range(1, 7):
+        local.run_row(number)
+        story = local.cell_view(number)["story"]
+        assert story["tone"] == "stopped" and story["response"].startswith("Stopped locally in ")
+    for number in (7, 8, 9):
+        story = local.cell_view(number)["story"]
+        assert story["tone"] == "pending" and "--trial or --keyed" in story["response"]
+    trial = trial_session(tmp_path / "trial", FakeRamenServer(decide=workcell_decide))
+    assert "Click Evaluate" in trial.cell_view(7)["story"]["response"]
+    run_all(trial)
+    for number, tone in ((7, "blocked"), (8, "blocked"), (9, "approved")):
+        story = trial.cell_view(number)["story"]
+        assert story["tone"] == tone and story["response"].startswith("ramen ai ")
+        assert "signed" in story["response"]
+
+
+def test_plain_labels_lead_and_codes_stay_available(tmp_path: Path) -> None:
+    assert hmi_story.PLAIN_LABELS["LOCAL_BLOCK"] == "STOPPED LOCALLY"
+    assert hmi_story.PLAIN_LABELS["BLOCKED"] == "BLOCKED BY ramen ai"
+    assert hmi_story.PLAIN_LABELS["RELEASED"] == "APPROVED & SIGNED"
+    assert set(hmi_story.PLAIN_LABELS) == {outcome.value for outcome in hmi_session.Outcome}
+    session = trial_session(tmp_path, FakeRamenServer(decide=workcell_decide))
+    results = run_all(session)
+    assert [results[n]["label"] for n in (1, 7, 9)] == [
+        "STOPPED LOCALLY",
+        "BLOCKED BY ramen ai",
+        "APPROVED & SIGNED",
+    ]
+    assert results[1]["outcome"] == "LOCAL_BLOCK" and results[7]["outcome"] == "BLOCKED"
+    view = session.session_view()
+    assert [row["label"] for row in view["rows"]][6:] == [
+        "BLOCKED BY ramen ai",
+        "BLOCKED BY ramen ai",
+        "APPROVED & SIGNED",
+    ]
+    assert view["outcome_labels"] == hmi_story.PLAIN_LABELS
+    assert (
+        view["summary"]["plain"]
+        == "6 stopped locally \u00b7 2 blocked by ramen ai \u00b7 1 approved & signed"
+    )
+    journal = session.journal_view()["entries"]
+    assert journal[0]["label"] == "STOPPED LOCALLY" and journal[-1]["label"] == "APPROVED & SIGNED"
+    pending = local_session(tmp_path / "local").session_view()["rows"]
+    assert pending[0]["label"] == "NOT RUN YET" and pending[6]["label"] == "NEEDS LIVE EVALUATION"
+    assert hmi_story.plain_summary({}) == "Nothing run yet"
+
+
+def test_rows_are_grouped_into_two_layers(tmp_path: Path) -> None:
+    view = local_session(tmp_path).session_view()
+    layers = view["layers"]
+    assert [layer["title"] for layer in layers] == [
+        "Layer 1: Instant Local Factory Checks",
+        "Layer 2: Live ramen ai Safety & Intent Evaluation",
+    ]
+    assert [layer["subtitle"] for layer in layers] == ["< 2 ms, offline", "Signed Receipts"]
+    assert layers[0]["rows"] == [1, 2, 3, 4, 5, 6] and layers[1]["rows"] == [7, 8, 9]
+    assert all(row["layer"] == (2 if row["live"] else 1) for row in view["rows"])
+    assert all(row["title"] == hmi_story.STORIES[row["number"]].title for row in view["rows"])
+
+
+def test_run_all_is_gated_by_mode(tmp_path: Path) -> None:
+    local = local_session(tmp_path / "l").session_view()
+    assert local["run_all"] == {"enabled": False, "pending_rows": 9, "pending_live": 3}
+    assert local["mode_label"] == "OFFLINE DEMO"
+    server = FakeRamenServer(decide=workcell_decide)
+    trial = trial_session(tmp_path / "t", server)
+    assert trial.session_view()["run_all"] == {"enabled": True, "pending_rows": 9, "pending_live": 3}
+    assert trial.session_view()["mode_label"] == "LIVE: PUBLIC TRIAL"
+    trial.run_row(1)
+    trial.run_row(7)
+    assert trial.session_view()["run_all"] == {"enabled": True, "pending_rows": 7, "pending_live": 2}
+    keyed = keyed_session(tmp_path / "k", server).session_view()
+    assert keyed["run_all"]["enabled"] and keyed["mode_label"] == "LIVE: PRODUCTION KEY"
+    limited = trial_session(tmp_path / "x", FakeRamenServer(decide=workcell_decide, limit_after=0))
+    limited.run_row(7)
+    assert limited.session_view()["run_all"]["enabled"] is False
+
+
+def test_spotlight_shows_only_the_triggered_subsystem(tmp_path: Path) -> None:
+    session = local_session(tmp_path)
+    for number, focus in FOCUS.items():
+        view = session.cell_view(number)
+        assert len(view["checks"]) == 10
+        spot = view["spotlight"]
+        assert spot["card"]["id"] == focus and spot["card"]["status"] in ("bad", "warn"), number
+        assert spot["all_clear"] is False and len(spot["others"]) == 9
+        assert spot["others_summary"] == "9 other factory checks: OK", number
+        assert all(item["status"] == "ok" for item in spot["others"])
+    final = session.cell_view(9)["spotlight"]
+    assert (
+        final["card"] is None
+        and final["all_clear"]
+        and final["others_summary"] == "All 10 factory checks: OK"
+    )
+    statuses = {n: session.cell_view(n)["spotlight"]["card"]["status"] for n in FOCUS}
+    assert statuses[7] == "warn" and statuses[8] == "warn"
+    assert all(statuses[n] == "bad" for n in range(1, 7))
+
+
+def test_spotlight_counts_other_findings() -> None:
+    items = [
+        {"id": "a", "name": "A", "status": "bad", "summary": "", "technical": ""},
+        {"id": "b", "name": "B", "status": "warn", "summary": "", "technical": ""},
+        {"id": "c", "name": "C", "status": "ok", "summary": "", "technical": ""},
+    ]
+    spot = hmi_story.spotlight(1, items)
+    assert spot["card"]["id"] == "a"
+    assert spot["others_summary"] == "2 other factory checks: 1 OK, 1 need attention"
+
+
+def test_page_carries_the_presentation_structure() -> None:
+    page = (DEMO / "hmi" / "index.html").read_text(encoding="utf-8")
+    button = re.search(r"<button[^>]*id=\"btn-run-all\"[^>]*>([^<]*)</button>", page)
+    assert (
+        button is not None and "disabled" in button.group(0) and button.group(1) == "Run all 9 (3 live calls)"
+    )
+    for text in ("What the AI tried to do", "Risk without protection", "How ramen robotics responded"):
+        assert text in page
+    assert "Tamper-Evident Audit Trail (EU Machinery Regulation, Jan 2027)" in page
+    assert 'id="spotlight"' in page and '<details id="other-checks"' in page
+    assert 'id="readouts"' not in page
+    css = (DEMO / "hmi" / "hmi.css").read_text(encoding="utf-8")
+    for selector in ("h3 {", ".story-line dt {", ".layer-title {", ".chip {", ".outcome-text {"):
+        rule = css[css.index(selector) :].split("}", 1)[0]
+        assert "uppercase" not in rule, selector
+    script = (DEMO / "hmi" / "hmi.js").read_text(encoding="utf-8")
+    assert "btn-run-all" in script and "run_all" in script and "spotlight" in script
+
+
+def test_plain_labels_keep_the_brand_lowercase() -> None:
+    hygiene = load(".github/scripts/check_hygiene.py")
+    texts = [
+        *hmi_story.PLAIN_LABELS.values(),
+        *(layer["title"] for layer in hmi_story.LAYERS),
+        *(layer["detail"] for layer in hmi_story.LAYERS),
+        *(story.title for story in hmi_story.STORIES.values()),
+        *(story.risk for story in hmi_story.STORIES.values()),
+    ]
+    assert not any(hygiene.BRAND_PATTERN.search(text) for text in texts)

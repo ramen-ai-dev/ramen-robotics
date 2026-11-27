@@ -93,12 +93,19 @@ labeled `evidence_class: trial`. Records you keep come from keyed runs.
 
 ## Workcell monitor (browser)
 
-`workcell_monitor.py` serves the same nine rows as a control-room page on `127.0.0.1`. It
-draws `CELL-PACK-03` in plan view (conveyor, freezer tunnel at -18 °C, infeed light curtain,
-tray camera confidence and `OPTICS_FOGGED`, mounted and required gripper, allergen
-changeover, operator separation against the collaborative zone), steps through the rows,
-shows each outcome with its finding codes, latency, ramen ai steering directive and Schema V5
-receipt, and exports and re-verifies the dossier with one click.
+`workcell_monitor.py` serves the same nine rows as a control-room page on `127.0.0.1`, written
+so a non-technical audience can follow each step. Every step opens with a plain-English card:
+what the AI tried to do, the risk without protection, and how ramen robotics responded. Exact
+identifiers, outcome codes and finding codes sit underneath as smaller technical text.
+
+The page draws `CELL-PACK-03` in plan view (conveyor, freezer tunnel at -18 °C, infeed light
+curtain, tray camera confidence, mounted and required gripper, allergen changeover, operator
+separation against the collaborative zone). Below the drawing, one spotlight card names the
+subsystem the step is about, and the other factory checks fold into a single line. Outcomes
+lead with plain badges (STOPPED LOCALLY, BLOCKED BY ramen ai, APPROVED & SIGNED) and keep
+`LOCAL_BLOCK`, `BLOCKED` and `RELEASED` beside them. The right-hand panel shows the ramen ai
+steering directive and the Schema V5 receipt. The tamper-evident audit trail at the bottom
+shows the hash-chained journal and the receipts, and exports and re-verifies the dossier.
 
 ```bash
 python demos/stage2_industrial_packaging/workcell_monitor.py --open                 # --local (default), 0 requests
@@ -115,8 +122,11 @@ RAMEN_API_KEY=... python demos/stage2_industrial_packaging/workcell_monitor.py -
 `--local` and `--trial` never read or send `RAMEN_API_KEY`, even when it is set. `--keyed`
 exits with status 2 when it is missing.
 
-Auto-play runs rows 1 to 6 and pauses before each live row, so every live evaluation is an
-explicit click. Each row runs once per run; **New run** starts over with fresh issuers, a new
+The left rail groups rows 1 to 6 as Layer 1 (instant local factory checks) and rows 7 to 9
+as Layer 2 (live ramen ai evaluation with signed receipts). Auto-play runs rows 1 to 6 and
+pauses before each live row, so every live evaluation is an explicit click. In `--trial` and
+`--keyed` mode, **Run all 9 (3 live calls)** runs every remaining row in order with pauses
+between steps; it is disabled in `--local` mode. Each row runs once per run; **New run** starts over with fresh issuers, a new
 configuration hash and a new run directory under `out/stage2_hmi/` (or `--run-dir`). Each
 export goes to a new `dossier-NN` directory inside the run directory.
 
@@ -132,5 +142,6 @@ Responses carry a Content-Security-Policy that allows same-origin scripts and st
 |---|---|
 | `workcell_monitor.py` | Command line, mode selection, bind and serve |
 | `hmi_session.py` | One run: issuers, profile, gate, journal, row results, cell views, dossier export |
+| `hmi_story.py` | Plain-English stories, outcome labels, layers and the factory-check spotlight (display only) |
 | `hmi_http.py` | Route table, request checks and the `http.server` adapter |
 | `hmi/index.html`, `hmi/hmi.css`, `hmi/hmi.js` | The page |

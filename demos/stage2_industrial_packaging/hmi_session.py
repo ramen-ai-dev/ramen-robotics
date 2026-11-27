@@ -44,6 +44,7 @@ from ramen_robotics.workcell_gate.profile import json_safe
 from ramen_robotics.workcell_gate.requests import request_summary
 
 try:  # repository root on sys.path (tests, editable installs)
+    from demos.stage2_industrial_packaging import hmi_story
     from demos.stage2_industrial_packaging.packaging_cell_demo import (
         DEFAULT_DEADLINE_S,
         TITLE,
@@ -58,6 +59,7 @@ try:  # repository root on sys.path (tests, editable installs)
         build_rows,
     )
 except ModuleNotFoundError:  # pragma: no cover - direct script execution
+    import hmi_story  # type: ignore[no-redef]
     from packaging_cell_demo import DEFAULT_DEADLINE_S, TITLE, make_host_tools  # type: ignore[no-redef]
     from scenario import (  # type: ignore[no-redef]
         FREEZER,
@@ -298,6 +300,7 @@ class HmiSession:
             "number": row.number,
             "status": status,
             "outcome": decision.outcome.value,
+            "label": hmi_story.plain_label(decision.outcome.value),
             "expected": row.expected.value,
             "expected_code": row.expected_code.value if row.expected_code else None,
             "stage": decision.stage,
@@ -344,9 +347,15 @@ class HmiSession:
                 note = "1 live evaluation"
             else:
                 note = "local check, 0 requests"
+            result = results.get(row.number)
             views.append(
                 {
                     "number": row.number,
+                    "title": hmi_story.STORIES[row.number].title,
+                    "layer": hmi_story.layer_of(row.live),
+                    "label": hmi_story.plain_label(
+                        result["outcome"] if result else None, available=not unavailable
+                    ),
                     "area": row.area,
                     "step": row.step,
                     "request_kind": type(row.request).__name__,
@@ -355,7 +364,7 @@ class HmiSession:
                     "live": row.live,
                     "available": not unavailable,
                     "note": note,
-                    "result": results.get(row.number),
+                    "result": result,
                 }
             )
         return views
@@ -366,9 +375,12 @@ class HmiSession:
         for result in results:
             by_outcome[result["outcome"]] = by_outcome.get(result["outcome"], 0) + 1
         profile = self.profile
+        rows = self.rows_view()
+        pending_live = sum(1 for row in rows if row["live"] and row["result"] is None)
         return {
             "title": TITLE,
             "mode": self.mode,
+            "mode_label": hmi_story.MODE_LABELS[self.mode],
             "mode_line": LOCAL_MODE_LINE if self.mode == "local" else describe_mode(self.gate),
             "endpoint": self.endpoint(),
             "cell": {
@@ -382,7 +394,17 @@ class HmiSession:
             "run_dir": str(self.run_dir),
             "journal_path": str(self.journal_path),
             "receipts_path": str(self.receipts_path),
-            "rows": self.rows_view(),
+            "rows": rows,
+            "layers": [
+                {**layer, "rows": [row["number"] for row in rows if row["layer"] == layer["number"]]}
+                for layer in hmi_story.LAYERS
+            ],
+            "run_all": {
+                "enabled": self.mode != "local" and not self.limit_reached,
+                "pending_rows": sum(1 for row in rows if row["result"] is None),
+                "pending_live": pending_live,
+            },
+            "outcome_labels": dict(hmi_story.PLAIN_LABELS),
             "quota": dict(self.gate.trial_quota),
             "trial_limit_reached": self.limit_reached,
             "allow_trial_dossier": self.allow_trial_dossier,
@@ -394,6 +416,7 @@ class HmiSession:
                 "unexpected": sum(1 for result in results if result["status"] == "unexpected"),
                 "live_requests": sum(1 for result in results if result["stage"] == "gate"),
                 "by_outcome": by_outcome,
+                "plain": hmi_story.plain_summary(by_outcome),
             },
         }
 
@@ -458,8 +481,11 @@ class HmiSession:
                 fields=list(request.fields),
                 allowed=request.destination in profile.egress.allowed_destinations,
             )
-        return {
+        view: dict[str, Any] = {
             "number": row.number,
+            "title": hmi_story.STORIES[row.number].title,
+            "layer": hmi_story.layer_of(row.live),
+            "live": row.live,
             "area": row.area,
             "step": row.step,
             "request_kind": type(request).__name__,
@@ -500,8 +526,19 @@ class HmiSession:
             "light_curtain": curtain,
             "egress": egress,
             "request": json_safe(request_summary(request)),
-            "result": dict(self.results).get(row.number),
         }
+        result = dict(self.results).get(row.number)
+        available = not (row.live and self.mode == "local")
+        items = hmi_story.checks(view)
+        view.update(
+            result=result,
+            available=available,
+            label=hmi_story.plain_label(result["outcome"] if result else None, available=available),
+            story=hmi_story.story(view, result, live=row.live, available=available),
+            checks=items,
+            spotlight=hmi_story.spotlight(row.number, items),
+        )
+        return view
 
     def journal_view(self) -> dict[str, Any]:
         entries = read_entries(self.journal_path) if self.journal_path.is_file() else []
@@ -518,6 +555,7 @@ class HmiSession:
                     "rush": entry.get("rush"),
                     "stage": entry.get("stage"),
                     "outcome": entry.get("outcome"),
+                    "label": hmi_story.plain_label(str(entry.get("outcome"))),
                     "codes": [finding.get("code") for finding in entry.get("findings") or []],
                     "receipt_id": gate.get("receipt_id"),
                     "receipt_class": gate.get("receipt_class"),

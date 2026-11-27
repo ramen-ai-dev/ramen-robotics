@@ -13,36 +13,50 @@
 <header class="bar">
   <div class="brand">
     <span class="brand-mark">ramen robotics</span>
-    <span class="brand-sub">Stage 2 workcell monitor</span>
+    <span class="brand-sub">Unsafe factory commands are stopped before they reach the machine, and every decision is signed.</span>
   </div>
   <dl class="bar-facts">
-    <div><dt>Cell</dt><dd id="cell-id" class="mono">CELL-PACK-03</dd></div>
     <div><dt>Mode</dt><dd><span id="mode-badge" class="badge">connecting</span></dd></div>
-    <div><dt>Endpoint</dt><dd id="endpoint" class="mono">-</dd></div>
+    <div><dt>Cell</dt><dd id="cell-id" class="mono">CELL-PACK-03</dd></div>
     <div><dt>Trial allowance</dt><dd id="quota" class="mono">-</dd></div>
-    <div><dt>Configuration</dt><dd id="config-hash" class="mono">-</dd></div>
-    <div><dt>Reached controller / PLC</dt><dd id="reached" class="mono">0</dd></div>
+    <div><dt>Commands that reached the machine</dt><dd id="reached" class="mono">0</dd></div>
   </dl>
 </header>
-<p id="mode-line" class="mode-line"></p>
+<p class="mode-line tech"><span id="mode-line"></span> <span>Configuration <span id="config-hash" class="mono">-</span></span></p>
 
 <main class="grid">
   <section class="panel steps" aria-labelledby="steps-title">
-    <h2 id="steps-title">Rush-order requests</h2>
+    <h2 id="steps-title">The rush-order story, step by step</h2>
     <div class="controls">
       <button id="btn-autoplay" type="button" class="primary">Auto-play</button>
       <button id="btn-step" type="button">Step</button>
       <button id="btn-reset" type="button" class="ghost">New run</button>
     </div>
+    <button id="btn-run-all" type="button" class="run-all" disabled>Run all 9 (3 live calls)</button>
+    <p id="run-all-note" class="tech">Live calls need --trial or --keyed.</p>
     <p id="autoplay-note" class="note" aria-live="polite"></p>
-    <ol id="row-list" class="row-list"></ol>
-    <div id="summary" class="summary"></div>
+    <div id="layers" class="layers"></div>
+    <div class="summary">
+      <p id="summary-plain" class="summary-plain">Nothing run yet</p>
+      <p id="summary-tech" class="tech"></p>
+    </div>
   </section>
 
-  <section class="panel cell" aria-labelledby="cell-title">
-    <h2 id="cell-title">CELL-PACK-03 collaborative application, speed and separation monitoring</h2>
+  <section class="panel cell" aria-labelledby="story-title">
+    <article id="story" class="story pending">
+      <p id="story-step" class="story-step">Step 1 of 9</p>
+      <h2 id="story-title" class="story-title">Loading</h2>
+      <dl class="story-lines">
+        <div class="story-line attempt"><dt>What the AI tried to do</dt><dd id="story-attempt">-</dd></div>
+        <div class="story-line risk"><dt>Risk without protection</dt><dd id="story-risk">-</dd></div>
+        <div class="story-line response"><dt>How ramen robotics responded</dt><dd id="story-response">-</dd></div>
+      </dl>
+      <p id="story-tech" class="tech"></p>
+    </article>
+
+    <p class="cell-caption tech">CELL-PACK-03, collaborative application with speed and separation monitoring (ISO 10218-2:2025), plan view</p>
     <svg id="schematic" class="schematic" viewBox="0 0 1000 470" role="img" aria-labelledby="svg-title">
-      <title id="svg-title">Plan view of workcell CELL-PACK-03: freezer tunnel, infeed light curtain, tray camera, arm ARM-PACK-03 with its collaborative zone, case packer</title>
+      <title id="svg-title">Plan view of workcell CELL-PACK-03: freezer tunnel, safety light curtain, tray camera, packing arm with its shared work zone, case packer</title>
       <defs>
         <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
           <path d="M20 0H0V20" class="grid-line" fill="none"/>
@@ -57,7 +71,7 @@
       </defs>
       <rect width="1000" height="470" fill="url(#grid)"/>
       <rect x="10" y="10" width="980" height="450" rx="8" class="cell-frame"/>
-      <text x="980" y="452" class="micro" text-anchor="end">plan view, 110 px = 1 m</text>
+      <text x="980" y="452" class="micro" text-anchor="end">110 px = 1 m around the arm</text>
 
       <g id="g-conveyor" class="zone-group">
         <rect class="focus-ring" x="24" y="324" width="852" height="62" rx="6"/>
@@ -75,27 +89,27 @@
             <rect x="760" y="340" width="34" height="30" rx="3" class="tray"/>
           </g>
         </g>
-        <text id="conveyor-state" x="30" y="446" class="value">conveyor held (flow left to right)</text>
+        <text id="conveyor-state" x="30" y="446" class="value">Line paused (meals flow left to right)</text>
       </g>
 
       <g id="g-freezer" class="zone-group">
         <rect class="focus-ring" x="24" y="274" width="252" height="152" rx="8"/>
         <rect x="30" y="280" width="240" height="140" rx="6" class="freezer"/>
-        <text x="42" y="298" class="label">Freezer tunnel Z2</text>
-        <text id="frz-temp" x="42" y="323" class="value big">-18.0 &#176;C</text>
+        <text x="42" y="298" class="label">Freezer tunnel</text>
+        <text id="frz-temp" x="42" y="323" class="value big">-18 &#176;C</text>
         <text id="frz-req" x="42" y="400" class="value"></text>
         <text id="frz-env" x="42" y="414" class="micro">PLC-FRZ-01 TIC_FRZ_Z2_SP</text>
       </g>
 
       <g id="g-curtain" class="zone-group">
         <rect class="focus-ring" x="296" y="284" width="68" height="146" rx="6"/>
-        <text x="330" y="298" class="label" text-anchor="middle">Infeed light curtain</text>
+        <text x="330" y="298" class="label" text-anchor="middle">Safety light curtain</text>
         <rect x="322" y="306" width="16" height="14" rx="2" class="lc-post"/>
         <rect x="322" y="390" width="16" height="14" rx="2" class="lc-post"/>
         <line x1="325" y1="320" x2="325" y2="390" class="lc-beam"/>
         <line x1="330" y1="320" x2="330" y2="390" class="lc-beam"/>
         <line x1="335" y1="320" x2="335" y2="390" class="lc-beam"/>
-        <text id="lc-state" x="300" y="424" class="value">active</text>
+        <text id="lc-state" x="300" y="424" class="value">on</text>
       </g>
 
       <g id="g-camera" class="zone-group">
@@ -107,33 +121,33 @@
         <rect x="478" y="256" width="100" height="10" rx="2" class="bar-bg"/>
         <rect id="cam-bar" x="478" y="256" width="97" height="10" rx="2" class="bar-fill"/>
         <line id="cam-threshold" x1="558" y1="252" x2="558" y2="270" class="threshold"/>
-        <text id="cam-conf" x="478" y="284" class="value">confidence 0.97</text>
+        <text id="cam-conf" x="478" y="284" class="value">97% confident</text>
         <text id="cam-fault" x="478" y="300" class="value"></text>
       </g>
 
       <g id="g-workorder" class="zone-group">
         <rect class="focus-ring" x="18" y="18" width="280" height="98" rx="8"/>
         <rect x="24" y="24" width="268" height="86" rx="6" class="card"/>
-        <text x="36" y="44" class="label">ERP / MES work order</text>
-        <text id="wo-id" x="36" y="66" class="value mono">-</text>
-        <text id="wo-qty" x="36" y="92" class="value">-</text>
+        <text x="36" y="44" class="label">Production order</text>
+        <text id="wo-qty" x="36" y="68" class="value">-</text>
+        <text id="wo-id" x="36" y="92" class="micro">-</text>
       </g>
 
       <g id="g-sanitation" class="zone-group">
         <rect class="focus-ring" x="18" y="116" width="280" height="108" rx="8"/>
         <rect x="24" y="122" width="268" height="96" rx="6" class="card"/>
         <text x="36" y="142" class="label">Allergen changeover</text>
-        <text id="san-change" x="36" y="164" class="value mono">-</text>
-        <text id="san-allergens" x="36" y="184" class="micro">-</text>
-        <text id="san-state" x="36" y="206" class="value">-</text>
+        <text id="san-change" x="36" y="164" class="value">-</text>
+        <text id="san-state" x="36" y="186" class="value">-</text>
+        <text id="san-allergens" x="36" y="206" class="micro">-</text>
       </g>
 
       <g id="g-egress" class="zone-group">
         <rect class="focus-ring" x="302" y="18" width="252" height="98" rx="8"/>
         <rect x="308" y="24" width="240" height="86" rx="6" class="card"/>
-        <text x="320" y="44" class="label">Recipe egress</text>
-        <text id="egress-dest" x="320" y="66" class="value mono">mes://plant-07/recipes only</text>
-        <text id="egress-state" x="320" y="92" class="value">no export requested</text>
+        <text x="320" y="44" class="label">Recipe data</text>
+        <text id="egress-state" x="320" y="68" class="value">stays inside the plant</text>
+        <text id="egress-dest" x="320" y="92" class="micro">mes://plant-07/recipes only</text>
         <line id="egress-line" x1="548" y1="67" x2="610" y2="67" class="egress-line" marker-end="url(#arrow)"/>
       </g>
 
@@ -141,23 +155,23 @@
         <rect class="focus-ring" x="572" y="96" width="356" height="232" rx="8"/>
         <circle id="zone-ring" cx="690" cy="210" r="110" class="zone-ring"/>
         <circle id="floor-ring" cx="690" cy="210" r="55" class="floor-ring"/>
-        <text id="zone-label" x="690" y="114" class="micro" text-anchor="middle">collaborative zone 1.0 m</text>
-        <text id="floor-label" x="690" y="168" class="micro" text-anchor="middle">floor 0.5 m</text>
-        <line id="sep-line" x1="690" y1="210" x2="965" y2="210" class="sep-line"/>
+        <text id="zone-label" x="690" y="114" class="micro" text-anchor="middle">shared work zone 1.0 m</text>
+        <text id="floor-label" x="690" y="168" class="micro" text-anchor="middle">minimum 0.5 m</text>
+        <line id="sep-line" x1="690" y1="210" x2="945" y2="210" class="sep-line"/>
         <g id="g-operator" transform="translate(965 210)">
           <ellipse cx="0" cy="0" rx="20" ry="10" class="operator-body"/>
           <circle cx="0" cy="0" r="10" class="operator-head"/>
-          <text id="op-label" x="0" y="-16" class="value" text-anchor="middle">operator 2.5 m</text>
+          <text id="op-label" x="20" y="-16" class="value" text-anchor="end">operator 2.5 m</text>
         </g>
-        <text id="speed-text" x="800" y="300" class="value">TCP 0.25 m/s</text>
+        <text id="speed-text" x="800" y="300" class="value">arm 0.25 m/s</text>
       </g>
 
       <g id="g-gripper" class="zone-group">
         <rect class="focus-ring" x="434" y="388" width="292" height="64" rx="8"/>
         <rect x="440" y="394" width="280" height="52" rx="6" class="card"/>
         <text x="452" y="412" class="label">Gripper</text>
-        <text id="grip-mounted" x="452" y="428" class="value mono">mounted -</text>
-        <text id="grip-required" x="452" y="442" class="micro">recipe requires -</text>
+        <text id="grip-mounted" x="452" y="428" class="value">-</text>
+        <text id="grip-required" x="452" y="442" class="micro">-</text>
         <line x1="712" y1="350" x2="712" y2="394" class="leader"/>
       </g>
 
@@ -169,7 +183,8 @@
         <rect x="700" y="342" width="7" height="12" rx="2" class="gripper-finger"/>
         <rect x="717" y="342" width="7" height="12" rx="2" class="gripper-finger"/>
         <text x="690" y="214" class="micro on-dark" text-anchor="middle">ARM</text>
-        <text x="690" y="142" class="label" text-anchor="middle">ARM-PACK-03</text>
+        <text x="564" y="204" class="label" text-anchor="end">Packing arm</text>
+        <text x="564" y="218" class="micro" text-anchor="end">ARM-PACK-03</text>
       </g>
 
       <g id="g-packer">
@@ -186,48 +201,59 @@
         <text id="stack-text" x="928" y="44" class="micro" text-anchor="end">idle</text>
       </g>
     </svg>
-    <dl id="readouts" class="readouts"></dl>
+
+    <div id="spotlight" class="spotlight" aria-live="polite"></div>
+    <details id="other-checks" class="other-checks">
+      <summary id="other-summary">Factory checks</summary>
+      <ul id="other-list" class="other-list"></ul>
+    </details>
   </section>
 
   <section class="panel decision" aria-labelledby="decision-title">
     <h2 id="decision-title">Decision</h2>
-    <div id="outcome" class="outcome idle">
-      <span id="outcome-text" class="outcome-text">Select a request</span>
-      <span id="outcome-expected" class="outcome-expected"></span>
+    <div id="outcome" class="outcome pending">
+      <span id="outcome-text" class="outcome-text">NOT RUN YET</span>
+      <span id="outcome-tech" class="tech"></span>
     </div>
-    <p id="row-title" class="row-title"></p>
     <button id="btn-run" type="button" class="primary wide" disabled>Run request</button>
     <p id="run-message" class="note" aria-live="polite"></p>
-    <dl class="facts">
-      <dt>Request</dt><dd id="d-request">-</dd>
-      <dt>Stage</dt><dd id="d-stage">-</dd>
-      <dt>Latency</dt><dd id="d-latency">-</dd>
-      <dt>Requests sent</dt><dd id="d-calls">-</dd>
-      <dt>Journal call id</dt><dd id="d-callid" class="mono">-</dd>
-    </dl>
-    <h3>Finding codes</h3>
-    <ul id="d-findings" class="findings"><li class="muted">-</li></ul>
     <h3>ramen ai steering directive</h3>
     <blockquote id="d-steering" class="steering muted">-</blockquote>
-    <h3>Schema V5 receipt</h3>
+    <h3>Signed receipt</h3>
     <dl id="d-receipt" class="facts"><dt>Receipt</dt><dd class="muted">-</dd></dl>
+    <details class="tech-details">
+      <summary>Technical detail</summary>
+      <dl class="facts">
+        <dt>Request</dt><dd id="d-request">-</dd>
+        <dt>Stage</dt><dd id="d-stage">-</dd>
+        <dt>Latency</dt><dd id="d-latency">-</dd>
+        <dt>Requests sent</dt><dd id="d-calls">-</dd>
+        <dt>Journal call id</dt><dd id="d-callid" class="mono">-</dd>
+      </dl>
+      <h3>Finding codes</h3>
+      <ul id="d-findings" class="findings"><li class="muted">-</li></ul>
+    </details>
   </section>
 </main>
 
 <section class="panel dossier" aria-labelledby="dossier-title">
   <div class="dossier-head">
-    <h2 id="dossier-title">Audit dossier: Regulation (EU) 2023/1230 and ISO 10218-2:2025</h2>
+    <div>
+      <h2 id="dossier-title" class="dossier-title">Tamper-Evident Audit Trail (EU Machinery Regulation, Jan 2027)</h2>
+      <p class="dossier-lead">Every decision above is sealed into a chain of records in which each entry locks the one before it, so any later edit, deletion or reordering is detected when the trail is checked.</p>
+      <p class="tech">Regulation (EU) 2023/1230, applies from January 20, 2027 &#183; ISO 10218-2:2025 &#183; SHA-256 hash chain &#183; Schema V5 Ed25519 receipts</p>
+    </div>
     <div class="tabs" role="tablist">
-      <button type="button" role="tab" id="tab-journal" aria-controls="panel-journal" aria-selected="true">Hash-chained journal</button>
-      <button type="button" role="tab" id="tab-receipts" aria-controls="panel-receipts" aria-selected="false">Receipts</button>
-      <button type="button" role="tab" id="tab-export" aria-controls="panel-export" aria-selected="false">Export and verify</button>
+      <button type="button" role="tab" id="tab-journal" aria-controls="panel-journal" aria-selected="true">Decision log</button>
+      <button type="button" role="tab" id="tab-receipts" aria-controls="panel-receipts" aria-selected="false">Signed receipts</button>
+      <button type="button" role="tab" id="tab-export" aria-controls="panel-export" aria-selected="false">Export &amp; verify</button>
     </div>
   </div>
   <div id="panel-journal" role="tabpanel" aria-labelledby="tab-journal">
     <p id="chain-status" class="chain-status">No entries yet.</p>
     <div class="table-wrap">
       <table class="data">
-        <thead><tr><th>Seq</th><th>Time (UTC)</th><th>Request</th><th>Stage</th><th>Outcome</th><th>Findings / receipt</th><th>prev_sha256</th><th>entry_sha256</th><th>Link</th></tr></thead>
+        <thead><tr><th>#</th><th>Time (UTC)</th><th>Request</th><th>Result</th><th>Findings / receipt</th><th>prev_sha256</th><th>entry_sha256</th><th>Link</th></tr></thead>
         <tbody id="journal-body"></tbody>
       </table>
     </div>
@@ -236,14 +262,14 @@
     <p id="receipt-status" class="chain-status">No live evaluations in this run.</p>
     <div class="table-wrap">
       <table class="data">
-        <thead><tr><th>Receipt id</th><th>Key</th><th>Schema</th><th>Class</th><th>Verdict</th><th>Outcome</th><th>Re-verified</th><th>Evaluated text</th></tr></thead>
+        <thead><tr><th>Receipt id</th><th>Key</th><th>Schema</th><th>Class</th><th>Verdict</th><th>Result</th><th>Re-verified</th><th>Evaluated text</th></tr></thead>
         <tbody id="receipt-body"></tbody>
       </table>
     </div>
   </div>
   <div id="panel-export" role="tabpanel" aria-labelledby="tab-export" hidden>
     <div class="export-row">
-      <button id="btn-export" type="button" class="primary">Export dossier and verify</button>
+      <button id="btn-export" type="button" class="primary">Export the audit dossier and verify it</button>
       <p id="export-note" class="note">Writes manifest.json, interventions.jsonl, receipts.jsonl, verification.json and DOSSIER.md into a new directory, then re-checks every digest, the hash chain, the journal-to-receipt join and every receipt with verify_dossier.</p>
     </div>
     <div id="export-result" class="export-result"></div>

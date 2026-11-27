@@ -12,12 +12,17 @@
     1: "g-workorder", 2: "g-sanitation", 3: "g-gripper", 4: "g-camera", 5: "g-freezer",
     6: "g-egress", 7: "g-curtain", 8: "g-zone", 9: "g-conveyor",
   };
+  const CHECK_GROUPS = {
+    work_order: "g-workorder", sanitation: "g-sanitation", gripper: "g-gripper", tray_camera: "g-camera",
+    freezer: "g-freezer", egress: "g-egress", light_curtain: "g-curtain", separation: "g-zone",
+  };
   const STAGES = {
     precheck: "local pre-check, held before any request",
     gate: "live verdict through RoboticsGate",
     local_only: "local only",
   };
-  const state = { session: null, selected: null, cell: null, busy: false, autoplay: false };
+  const ICONS = { bad: "!", warn: "!", ok: "\u2713" };
+  const state = { session: null, selected: null, cell: null, busy: false, autoplay: false, runningAll: false };
 
   // -- helpers ---------------------------------------------------------------
 
@@ -38,11 +43,19 @@
   function family(outcome) { return outcome && outcome.startsWith("HOLD") ? "HOLD" : outcome; }
   function rowById(n) { return state.session.rows.find((row) => row.number === n); }
   function expectedText(row) { return row.expected + (row.expected_code ? " " + row.expected_code : ""); }
+  function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
   function setState(id, value) {
     const group = $(id);
     group.classList.remove("state-ok", "state-warn", "state-bad");
     if (value) group.classList.add("state-" + value);
   }
+
+  // Labels arrive with the brand already lowercase ("BLOCKED BY ramen ai"); no CSS upper-cases them.
+  function fillLabel(node, label) {
+    node.textContent = String(label || "");
+    return node;
+  }
+  function labelChip(label, cls) { return fillLabel(el("span", { cls: "chip " + (cls || "") }), label); }
 
   async function api(method, path) {
     const init = { method, cache: "no-store", headers: {} };
@@ -58,12 +71,12 @@
     return { ok: response.ok, status: response.status, body };
   }
 
-  // -- header, rows, summary -------------------------------------------------
+  // -- header, layers, summary -----------------------------------------------
 
   function quotaText(session) {
     if (session.mode !== "trial") return "not used";
     const entries = Object.entries(session.quota || {});
-    if (!entries.length) return session.trial_limit_reached ? "used up for today" : "reported after the first live request";
+    if (!entries.length) return session.trial_limit_reached ? "used up for today" : "shown after the first live call";
     return entries.map(([key, value]) => {
       if (key === "reset_epoch_seconds" && Number.isFinite(Number(value))) {
         return "reset " + new Date(Number(value) * 1000).toISOString().replace(".000Z", "Z");
@@ -75,66 +88,79 @@
   function renderSession() {
     const s = state.session;
     const badge = $("mode-badge");
-    badge.textContent = s.mode.toUpperCase();
+    badge.textContent = s.mode_label;
     badge.className = "badge " + s.mode;
     setText("cell-id", s.cell.cell_id);
-    setText("endpoint", s.endpoint || "none, local checks only");
     setText("quota", quotaText(s));
     setText("config-hash", short(s.cell.config_hash, 16));
     $("config-hash").title = s.cell.config_hash;
-    setText("reached", s.reached.length ? s.reached.length + " (" + s.reached.join("; ") + ")" : "0");
+    setText("reached", s.reached.length ? s.reached.length + " (approved only)" : "0");
+    $("reached").title = s.reached.join("; ");
     setText("mode-line", s.mode_line);
     setText("run-dir", "Run directory: " + s.run_dir);
-    renderRows();
+    renderLayers();
     renderSummary();
     updateControls();
   }
 
-  function renderRows() {
-    const list = $("row-list");
-    list.replaceChildren();
-    for (const row of state.session.rows) {
-      const button = el("button", { cls: "row-item" });
-      button.type = "button";
-      const result = row.result;
-      if (result) button.classList.add("s-" + family(result.outcome));
-      if (row.number === state.selected) {
-        button.classList.add("selected");
-        button.setAttribute("aria-current", "true");
-      }
-      button.append(
-        el("span", { cls: "num", text: row.number }),
-        el("span", { cls: "area", text: row.area }),
-        el("span", { cls: "step", text: row.step }),
-      );
-      const chips = el("span", { cls: "chips" });
-      if (result) {
-        chips.append(el("span", { cls: "chip " + family(result.outcome), text: result.outcome }));
-        if (result.status === "unexpected") chips.append(el("span", { cls: "chip unexpected", text: "unexpected" }));
-        for (const code of new Set(result.findings.map((finding) => finding.code))) {
-          chips.append(el("span", { cls: "chip", text: code }));
-        }
-        if (result.gate && result.gate.receipt_class) {
-          chips.append(el("span", { cls: "chip live", text: result.gate.receipt_class + " receipt" }));
-        }
-      } else {
-        chips.append(el("span", { cls: "chip expected", text: "expected " + expectedText(row) }));
-        chips.append(el("span", { cls: "chip " + (row.live && row.available ? "live" : "pending"), text: row.note }));
-      }
-      button.append(chips);
-      button.addEventListener("click", () => {
-        if (state.autoplay) stopAutoplay("Auto-play stopped.");
-        selectRow(row.number);
-      });
-      list.append(el("li", null, button));
+  function renderLayers() {
+    const box = $("layers");
+    box.replaceChildren();
+    for (const layer of state.session.layers) {
+      const list = el("ol", { cls: "row-list" });
+      for (const number of layer.rows) list.append(el("li", null, rowButton(rowById(number))));
+      box.append(el("section", { cls: "layer layer-" + layer.number },
+        el("h3", { cls: "layer-title", text: layer.title }),
+        el("p", { cls: "layer-sub", text: layer.subtitle + ". " + layer.detail }),
+        list));
     }
+  }
+
+  function rowButton(row) {
+    const button = el("button", { cls: "row-item" });
+    button.type = "button";
+    const result = row.result;
+    if (result) button.classList.add("s-" + family(result.outcome));
+    if (row.number === state.selected) {
+      button.classList.add("selected");
+      button.setAttribute("aria-current", "true");
+    }
+    const chips = el("span", { cls: "chips" });
+    if (result) {
+      chips.append(labelChip(row.label, family(result.outcome)));
+      if (result.status === "unexpected") chips.append(el("span", { cls: "chip unexpected", text: "UNEXPECTED" }));
+      const codes = [...new Set(result.findings.map((finding) => finding.code))];
+      chips.append(el("span", { cls: "chip code", text: [result.outcome, ...codes].join(" \u00b7 ") }));
+    } else {
+      chips.append(labelChip(row.label, "pending"));
+      chips.append(el("span", { cls: "chip code", text: "expected " + expectedText(row) }));
+    }
+    button.append(
+      el("span", { cls: "num", text: row.number }),
+      el("span", { cls: "title", text: row.title }),
+      el("span", { cls: "step", text: row.area + " \u00b7 " + row.step }),
+      chips,
+    );
+    button.addEventListener("click", () => {
+      if (state.autoplay) stopAutoplay("Auto-play stopped.");
+      selectRow(row.number);
+    });
+    return button;
   }
 
   function renderSummary() {
     const sum = state.session.summary;
+    setText("summary-plain", sum.plain);
     const outcomes = Object.entries(sum.by_outcome).map(([key, value]) => key + " " + value).join(", ");
-    setText("summary", sum.ran + " of 9 ran \u00b7 " + sum.ok + " as expected \u00b7 " + sum.unexpected +
-      " unexpected \u00b7 " + sum.live_requests + " live requests" + (outcomes ? " \u00b7 " + outcomes : ""));
+    setText("summary-tech", sum.ran + " of 9 ran \u00b7 " + sum.ok + " as expected \u00b7 " + sum.unexpected +
+      " unexpected \u00b7 " + plural(sum.live_requests, "live request") + (outcomes ? " \u00b7 " + outcomes : ""));
+  }
+
+  function runAllText(s) {
+    const all = s.run_all;
+    if (all.pending_rows === 0) return "All 9 steps ran";
+    if (all.pending_rows === s.rows.length) return "Run all " + all.pending_rows + " (" + plural(all.pending_live, "live call") + ")";
+    return "Run remaining " + all.pending_rows + " (" + plural(all.pending_live, "live call") + ")";
   }
 
   function updateControls() {
@@ -145,66 +171,92 @@
     run.classList.toggle("live", Boolean(row && row.live && row.available && !row.result));
     if (!row) {
       run.disabled = true;
-      run.textContent = "Select a request";
+      run.textContent = "Select a step";
     } else if (row.result) {
       run.disabled = true;
-      run.textContent = "Row " + row.number + " ran: " + row.result.outcome;
+      run.textContent = "Step " + row.number + " done";
     } else if (!row.available) {
       run.disabled = true;
-      run.textContent = "Live verdict needs --trial or --keyed";
+      run.textContent = "Live evaluation needs --trial or --keyed";
     } else if (row.live && s.trial_limit_reached) {
       run.disabled = true;
       run.textContent = "Trial allowance used up";
     } else {
-      run.disabled = state.busy;
-      run.textContent = row.live ? "Evaluate row " + row.number + " live (1 request)" : "Run row " + row.number + " (local check)";
+      run.disabled = state.busy || state.runningAll;
+      run.textContent = row.live ? "Evaluate step " + row.number + " live with ramen ai (1 call)" : "Run step " + row.number + " (local check)";
     }
     const auto = $("btn-autoplay");
     auto.textContent = state.autoplay ? "Stop auto-play" : "Auto-play";
     auto.classList.toggle("active", state.autoplay);
-    auto.disabled = state.busy && !state.autoplay;
-    $("btn-step").disabled = state.busy || state.autoplay;
-    $("btn-reset").disabled = state.busy;
-    $("btn-export").disabled = state.busy || s.summary.ran === 0;
+    auto.disabled = state.runningAll || (state.busy && !state.autoplay);
+    $("btn-step").disabled = state.busy || state.autoplay || state.runningAll;
+    $("btn-reset").disabled = state.busy || state.runningAll;
+    $("btn-export").disabled = state.busy || state.runningAll || s.summary.ran === 0;
+
+    const runAll = $("btn-run-all");
+    runAll.classList.toggle("running", state.runningAll);
+    if (state.runningAll) {
+      runAll.disabled = false;
+      runAll.textContent = "Stop after this step";
+    } else {
+      runAll.disabled = !s.run_all.enabled || s.run_all.pending_rows === 0 || state.busy || state.autoplay;
+      runAll.textContent = runAllText(s);
+    }
+    const notes = {
+      local: "Live calls need --trial or --keyed.",
+      trial: "Runs every step in order. Live calls go to the keyless trial, at least 2 s apart.",
+      keyed: "Runs every step in order. Live calls use RAMEN_API_KEY and return production receipts.",
+    };
+    setText("run-all-note", s.trial_limit_reached ? "The trial allowance is used up for today." : notes[s.mode]);
+  }
+
+  // -- story card ------------------------------------------------------------
+
+  function renderStory() {
+    const c = state.cell;
+    const st = c.story;
+    const result = rowById(c.number).result || c.result;
+    $("story").className = "story " + st.tone + (st.safe ? " safe" : "");
+    setText("story-step", "Step " + c.number + " of 9 \u00b7 Layer " + c.layer);
+    setText("story-title", st.title);
+    setText("story-attempt", st.attempt);
+    setText("story-risk", st.risk);
+    setText("story-response", st.response);
+    const codes = result ? [...new Set(result.findings.map((finding) => finding.code))] : [];
+    setText("story-tech", [c.request_kind + (c.rush ? " (rush)" : ""), st.technical, result ? result.outcome : null, ...codes]
+      .filter(Boolean).join(" \u00b7 "));
   }
 
   // -- schematic -------------------------------------------------------------
 
   function renderCell() {
     const c = state.cell;
-    const row = rowById(c.number);
-    const result = row.result || c.result;
-    const reads = [];
+    const result = rowById(c.number).result || c.result;
+    const statuses = Object.fromEntries(c.checks.map((check) => [check.id, check.status]));
     for (const [n, id] of Object.entries(FOCUS)) $(id).classList.toggle("focus", Number(n) === c.number);
+    for (const [check, group] of Object.entries(CHECK_GROUPS)) setState(group, statuses[check] || null);
 
     const wo = c.work_order;
     if (wo) {
-      const mismatch = wo.signed_quantity !== null && wo.signed_quantity !== undefined && wo.signed_quantity !== wo.requested_quantity;
-      setText("wo-id", wo.work_order_id);
-      setText("wo-qty", "signed qty " + (wo.signed_quantity ?? "-") + " \u00b7 requested " + wo.requested_quantity);
-      setState("g-workorder", mismatch ? "bad" : "ok");
-      reads.push(["Work order", wo.work_order_id + ": signed " + (wo.signed_quantity ?? "-") + ", requested " + wo.requested_quantity, mismatch ? "bad" : "ok"]);
+      const changed = wo.signed_quantity !== null && wo.signed_quantity !== undefined && wo.signed_quantity !== wo.requested_quantity;
+      setText("wo-qty", changed ? "approved " + Number(wo.signed_quantity).toLocaleString("en-US") + ", asking " +
+        Number(wo.requested_quantity).toLocaleString("en-US") : Number(wo.requested_quantity).toLocaleString("en-US") + " meals, signed");
+      setText("wo-id", wo.work_order_id + " \u00b7 " + wo.lot_id);
     } else {
-      setText("wo-id", "batch running");
-      setText("wo-qty", c.request_kind + " request");
+      setText("wo-qty", "batch already running");
+      setText("wo-id", c.request_kind);
       setState("g-workorder", null);
-      reads.push(["Work order", "no batch start in this request", null]);
     }
 
     const san = c.sanitation;
     const removed = san.previous_allergens.filter((item) => !san.next_allergens.includes(item));
-    setText("san-change", (san.previous_recipe_id || "-") + " \u2192 " + san.next_recipe_id);
-    setText("san-allergens", (san.previous_allergens.join(", ") || "-") + " \u2192 " + (san.next_allergens.join(", ") || "-"));
-    setText("san-state", san.clearance_presented ? "cleaning clearance presented" : "no cleaning clearance");
-    setState("g-sanitation", san.clearance_presented ? "ok" : "bad");
-    reads.push(["Allergen sanitation", (san.clearance_presented ? "signed clearance presented" : "no cleaning clearance") +
-      (removed.length ? " (" + removed.join(", ") + " removed)" : ""), san.clearance_presented ? "ok" : "bad"]);
+    setText("san-change", removed.length ? removed.join(", ") + " \u2192 " + removed.join(", ") + "-free" : "no allergen change");
+    setText("san-state", san.clearance_presented ? "cleaning signed off" : "no cleaning sign-off");
+    setText("san-allergens", (san.previous_recipe_id || "-") + " \u2192 " + san.next_recipe_id);
 
     const grip = c.gripper;
-    setText("grip-mounted", "mounted " + grip.mounted);
-    setText("grip-required", "recipe " + grip.recipe_id + " requires " + (grip.required.join(", ") || "-"));
-    setState("g-gripper", grip.match ? "ok" : "bad");
-    reads.push(["Gripper", grip.mounted + (grip.match ? " matches " : " mounted, recipe needs ") + (grip.required.join(", ") || "-"), grip.match ? "ok" : "bad"]);
+    setText("grip-mounted", grip.match ? "correct gripper fitted" : "wrong gripper fitted");
+    setText("grip-required", grip.mounted + ", recipe needs " + (grip.required.join(", ") || "-"));
 
     const cam = c.sensors.tray_camera_infeed;
     if (cam) {
@@ -213,70 +265,43 @@
       const tick = String(BAR_X + Number(c.sensor_min_confidence) * 100);
       $("cam-threshold").setAttribute("x1", tick);
       $("cam-threshold").setAttribute("x2", tick);
-      setText("cam-conf", "confidence " + fmt(cam.confidence));
-      setText("cam-fault", cam.faults.join(", "));
-      setState("g-camera", cam.healthy ? "ok" : "bad");
-      reads.push(["Tray camera", "confidence " + fmt(cam.confidence) + " (min " + fmt(c.sensor_min_confidence) + ")" + (cam.faults.length ? ", " + cam.faults.join(", ") : ", healthy"), cam.healthy ? "ok" : "bad"]);
+      setText("cam-conf", Math.round(Number(cam.confidence) * 100) + "% confident");
+      setText("cam-fault", cam.faults.includes("OPTICS_FOGGED") ? "lens fogged" : cam.faults.join(", "));
     }
-    const scanner = c.sensors.area_scanner_cell_03;
-    if (scanner) reads.push(["Area scanner", "confidence " + fmt(scanner.confidence) + (scanner.healthy ? ", healthy" : ", degraded"), scanner.healthy ? "ok" : "bad"]);
 
     const frz = c.freezer;
-    const outside = frz.requested_c !== null &&
-      ((frz.max_c !== null && frz.requested_c > frz.max_c) || (frz.min_c !== null && frz.requested_c < frz.min_c));
-    setText("frz-temp", fmt(frz.current_c, 1) + " \u00b0C");
-    setText("frz-req", frz.requested_c !== null ? "requested " + fmt(frz.requested_c, 1) + " \u00b0C" : "envelope " + fmt(frz.min_c, 0) + " to " + fmt(frz.max_c, 0) + " \u00b0C");
+    setText("frz-temp", fmt(frz.current_c, 0) + " \u00b0C");
+    setText("frz-req", frz.requested_c !== null ? "asked for " + fmt(frz.requested_c, 0) + " \u00b0C" : "approved " + fmt(frz.min_c, 0) + " to " + fmt(frz.max_c, 0) + " \u00b0C");
     setText("frz-env", frz.node_id + " " + frz.tag);
-    setState("g-freezer", outside ? "bad" : "ok");
-    reads.push(["Freezer zone setpoint", fmt(frz.current_c, 1) + " \u00b0C" + (frz.requested_c !== null ? " \u2192 " + fmt(frz.requested_c, 1) + " \u00b0C requested" : "") +
-      " (envelope " + fmt(frz.min_c, 0) + " to " + fmt(frz.max_c, 0) + " \u00b0C)", outside ? "bad" : "ok"]);
 
     const eg = c.egress;
     if (eg.requested) {
       let host = eg.destination;
       try { host = new URL(eg.destination).host || eg.destination; } catch (error) { host = eg.destination; }
+      setText("egress-state", eg.allowed ? "export allowed" : "leaving the company");
       setText("egress-dest", host);
-      setText("egress-state", eg.allowed ? "destination allowed" : eg.fields.join(", ") + " leaving the plant");
-      setState("g-egress", eg.allowed ? "ok" : "bad");
-      reads.push(["Recipe egress", eg.recipe_id + " to " + eg.destination, eg.allowed ? "ok" : "bad"]);
     } else {
+      setText("egress-state", "stays inside the plant");
       setText("egress-dest", (eg.allowed_destinations.join(", ") || "none") + " only");
-      setText("egress-state", "no export requested");
       setState("g-egress", null);
     }
 
     const lc = c.light_curtain;
-    if (lc.mute_requested) {
-      setText("lc-state", "mute requested");
-      setState("g-curtain", "warn");
-      reads.push(["Infeed light curtain", lc.mutation_type + " " + lc.requested_value + " for " + lc.duration_sec + " s, key evidence " +
-        (lc.key_evidence_presented ? "presented" : "none"), lc.key_evidence_presented ? "warn" : "bad"]);
-    } else {
-      setText("lc-state", lc.safeguard_ok ? "active" : "fault");
-      setState("g-curtain", lc.safeguard_ok ? "ok" : "bad");
-      reads.push(["Infeed light curtain", lc.safeguard_ok ? "active, no change requested" : "safeguard fault", lc.safeguard_ok ? "ok" : "bad"]);
-    }
+    setText("lc-state", lc.mute_requested ? "switch-off requested" : lc.safeguard_ok ? "on" : "fault");
 
-    renderSeparation(c, reads);
-    reads.push(["Operating mode", c.mode + (c.rush ? ", rush order (journaled, relaxes nothing)" : ""), null]);
+    renderSeparation(c);
 
     const fam = result ? family(result.outcome) : null;
     $("trays").classList.toggle("running", fam === "RELEASED");
-    setText("conveyor-state", fam === "RELEASED" ? "conveyor running: batch released" : result ? "conveyor held: request not released" : "conveyor held (flow left to right)");
+    setText("conveyor-state", fam === "RELEASED" ? "Line running: batch approved and started" : result ? "Line paused: command not executed" : "Line paused (meals flow left to right)");
     $("lamp-red").classList.toggle("on", fam === "BLOCKED");
     $("lamp-amber").classList.toggle("on", fam === "LOCAL_BLOCK" || fam === "HOLD");
     $("lamp-green").classList.toggle("on", fam === "RELEASED");
-    setText("stack-text", fam ? result.outcome : "idle");
-
-    const box = $("readouts");
-    box.replaceChildren();
-    for (const [label, text, status] of reads) {
-      const item = el("div", { cls: status || "" }, el("dt", { text: label }), el("dd", { text }));
-      box.append(item);
-    }
+    fillLabel($("stack-text"), result ? rowById(c.number).label : "idle");
+    renderSpotlight();
   }
 
-  function renderSeparation(c, reads) {
+  function renderSeparation(c) {
     const sep = c.separation;
     const zoneR = Number(sep.collaborative_zone_m) * SCALE;
     const floorR = Number(sep.min_separation_m || 0) * SCALE;
@@ -284,16 +309,14 @@
     $("floor-ring").setAttribute("r", String(floorR));
     $("zone-label").setAttribute("y", String(210 - zoneR + 14));
     $("floor-label").setAttribute("y", String(210 - floorR + 13));
-    setText("zone-label", "collaborative zone " + fmt(sep.collaborative_zone_m, 1) + " m");
-    setText("floor-label", floorR > 20 ? "floor " + fmt(sep.min_separation_m, 1) + " m" : "");
-    const operator = $("g-operator");
+    setText("zone-label", "shared work zone " + fmt(sep.collaborative_zone_m, 1) + " m");
+    setText("floor-label", floorR > 20 ? "minimum " + fmt(sep.min_separation_m, 1) + " m" : "");
     const speed = sep.commanded_speed_mps;
-    setText("speed-text", speed !== null && speed !== undefined ? "TCP " + fmt(speed) + " m/s (limit " + fmt(sep.max_tcp_speed_mps) + ")" : "no motion requested");
+    setText("speed-text", speed !== null && speed !== undefined ? "arm " + fmt(speed) + " m/s" : "arm idle");
+    const operator = $("g-operator");
     if (sep.nearest_human_m === null || sep.nearest_human_m === undefined) {
       operator.classList.add("hidden");
       $("sep-line").classList.add("hidden");
-      setState("g-zone", "bad");
-      reads.push(["Operator separation", "no reading (treated as missing evidence)", "bad"]);
       return;
     }
     const d = Number(sep.nearest_human_m);
@@ -306,10 +329,38 @@
     label.setAttribute("text-anchor", x > 930 ? "end" : "middle");
     label.setAttribute("x", x > 930 ? "20" : "0");
     setText("op-label", "operator " + fmt(d, 1) + " m");
-    const status = d < Number(sep.min_separation_m || 0) ? "bad" : d < Number(sep.collaborative_zone_m) ? "warn" : "ok";
-    setState("g-zone", status);
-    const where = status === "ok" ? "outside the collaborative zone" : status === "warn" ? "inside the collaborative zone" : "below the separation floor";
-    reads.push(["Operator separation", fmt(d, 1) + " m, " + where + (speed !== null && speed !== undefined ? ", TCP " + fmt(speed) + " m/s" : ""), status]);
+  }
+
+  function renderSpotlight() {
+    const spot = state.cell.spotlight;
+    const box = $("spotlight");
+    box.replaceChildren();
+    if (spot.card) {
+      const card = spot.card;
+      const kicker = card.status === "bad" ? card.name + ": fault found" : card.name + ": needs a live safety decision";
+      box.append(el("div", { cls: "spot " + card.status },
+        el("span", { cls: "icon", text: ICONS[card.status] || "!" }),
+        el("p", { cls: "spot-kicker", text: kicker }),
+        el("p", { cls: "spot-text", text: card.summary }),
+        el("p", { cls: "tech", text: card.technical })));
+    } else {
+      box.append(el("div", { cls: "spot ok" },
+        el("span", { cls: "icon", text: ICONS.ok }),
+        el("p", { cls: "spot-kicker", text: "All clear" }),
+        el("p", { cls: "spot-text", text: "Every factory check passed for this step." }),
+        el("p", { cls: "tech", text: state.cell.checks.length + " subsystems healthy" })));
+    }
+    const details = $("other-checks");
+    details.classList.toggle("attention", spot.others.some((item) => item.status !== "ok"));
+    setText("other-summary", spot.others_summary);
+    const list = $("other-list");
+    list.replaceChildren();
+    for (const item of spot.others) {
+      list.append(el("li", { cls: item.status },
+        el("span", { cls: "name", text: item.name + ": " }),
+        el("span", { text: item.summary }),
+        el("p", { cls: "tech", text: item.technical })));
+    }
   }
 
   // -- decision panel --------------------------------------------------------
@@ -319,16 +370,14 @@
     const row = rowById(c.number);
     const result = row.result || c.result;
     const box = $("outcome");
-    setText("row-title", "Row " + c.number + " \u00b7 " + c.area + " \u00b7 " + c.step);
+    box.className = "outcome " + (result ? family(result.outcome) : "pending");
+    fillLabel($("outcome-text"), row.label);
     if (result) {
-      box.className = "outcome " + family(result.outcome);
-      setText("outcome-text", result.outcome);
-      setText("outcome-expected", result.status === "ok" ? "as expected (" + expectedText(row) + ")" :
-        result.status === "limit" ? "trial allowance used up, held" : "UNEXPECTED: expected " + expectedText(row));
+      const codes = [...new Set(result.findings.map((finding) => finding.code))];
+      const verdict = result.status === "ok" ? "\u2713 as expected" : result.status === "limit" ? "trial allowance used up" : "UNEXPECTED, expected " + expectedText(row);
+      setText("outcome-tech", [result.outcome, ...codes, verdict].join(" \u00b7 "));
     } else {
-      box.className = "outcome pending";
-      setText("outcome-text", row.available ? "not run yet" : "not evaluated, live required");
-      setText("outcome-expected", "expected " + expectedText(row));
+      setText("outcome-tech", "expected " + expectedText(row));
     }
     setText("d-request", c.request_kind + (c.rush ? " (rush order)" : ""));
     setText("d-stage", result ? STAGES[result.stage] || result.stage : "-");
@@ -344,12 +393,13 @@
         findings.append(el("li", null, el("span", { cls: "code", text: finding.code }), el("span", { text: finding.detail })));
       }
     } else {
-      findings.append(el("li", { cls: "muted", text: result ? (result.stage === "gate" ? "none: every cell check passed, sent for a live verdict" : "none") : "-" }));
+      findings.append(el("li", { cls: "muted", text: result ? (result.stage === "gate" ? "none: every factory check passed, sent for a live verdict" : "none") : "-" }));
     }
 
     const steering = $("d-steering");
     const directive = result && result.gate && result.gate.steering ? result.gate.steering : result && result.stage === "gate" ? result.reason : null;
-    steering.textContent = directive || (result && result.gate ? "none: the verdict allowed the request" : "-");
+    steering.textContent = directive || (result && result.gate ? "None: the request was approved." :
+      result ? "None needed: stopped locally before any request." : "-");
     steering.classList.toggle("muted", !directive);
 
     const receipt = $("d-receipt");
@@ -357,16 +407,16 @@
     const add = (label, value, cls) => { receipt.append(el("dt", { text: label }), el("dd", { cls: cls || "", text: value })); };
     if (result && result.gate && result.gate.receipt_id) {
       const g = result.gate;
+      add("Signature", g.receipt_verified ? "\u2713 verified (Ed25519, Schema V5)" : "\u2717 did not verify", g.receipt_verified ? "ok-text" : "bad-text");
+      add("Kind", g.receipt_class === "trial" ? "trial receipt (public allowance)" : g.receipt_class === "production" ? "production receipt" : "-");
+      add("Machine ran it", result.executed ? "yes, after approval" : "no", result.executed ? "ok-text" : "");
       add("Receipt id", g.receipt_id, "mono");
       add("Key", g.kid || "-", "mono");
-      add("Class", g.receipt_class === "trial" ? "trial (keyless public allowance)" : g.receipt_class || "-");
-      add("Verdict", g.verdict || "-");
-      add("Signature", g.receipt_verified ? "\u2713 Ed25519 verified before release decision" : "\u2717 did not verify", g.receipt_verified ? "ok-text" : "bad-text");
-      add("Host tool ran", result.executed ? "yes" : "no", result.executed ? "ok-text" : "");
+      add("Verdict", g.verdict || "-", "mono");
     } else if (result) {
-      add("Receipt", result.stage === "gate" ? "none returned" : "none: held locally, nothing was sent", "muted");
+      add("Receipt", result.stage === "gate" ? "none returned" : "Not needed: stopped locally, nothing was sent.", "muted");
     } else {
-      add("Receipt", "-", "muted");
+      add("Receipt", row.live ? "Issued by ramen ai when this step runs live." : "Not needed for local checks.", "muted");
     }
   }
 
@@ -390,12 +440,13 @@
     state.selected = n;
     const res = await api("GET", "/api/rows/" + n + "/cell");
     if (!res.ok) {
-      setText("run-message", res.body.detail || "could not load row " + n);
+      setText("run-message", res.body.detail || "could not load step " + n);
       return;
     }
     if (state.selected !== n) return;
     state.cell = res.body;
-    renderRows();
+    renderLayers();
+    renderStory();
     renderCell();
     renderDecision();
     updateControls();
@@ -407,7 +458,7 @@
     state.busy = true;
     updateControls();
     setText("run-message", row.live ? (state.session.mode === "trial" ?
-      "Evaluating live on the keyless trial. Requests are spaced at least 2 s apart." : "Evaluating live with RAMEN_API_KEY.") : "Running local cell checks.");
+      "Asking ramen ai on the keyless trial. Calls are spaced at least 2 s apart." : "Asking ramen ai with RAMEN_API_KEY.") : "Running local factory checks.");
     const res = await api("POST", "/api/rows/" + n + "/run");
     state.busy = false;
     setText("run-message", res.ok ? "" : res.body.detail || "request failed (" + res.status + ")");
@@ -426,29 +477,29 @@
     while (state.autoplay) {
       const next = state.session.rows.find((row) => !row.result);
       if (!next) {
-        stopAutoplay("All nine requests ran. Export the dossier below.");
+        stopAutoplay("All nine steps ran. Export the audit dossier below.");
         return;
       }
       await selectRow(next.number);
       if (next.live) {
         const pending = state.session.rows.filter((row) => row.live && !row.result).map((row) => row.number);
         if (!next.available) {
-          stopAutoplay("Rows " + pending.join(", ") + ": not evaluated, live required. Restart with --trial or --keyed to evaluate them.");
+          stopAutoplay("Steps " + pending.join(", ") + " need a live ramen ai evaluation. Restart with --trial or --keyed to run them.");
         } else if (state.session.trial_limit_reached) {
           stopAutoplay("The trial allowance is used up for today.");
         } else {
-          setText("autoplay-note", "Paused before live row " + next.number + ". Click \u201cEvaluate row " + next.number + " live\u201d to send 1 request.");
+          setText("autoplay-note", "Paused before live step " + next.number + ". Click \u201cEvaluate step " + next.number + " live\u201d to send 1 call.");
           updateControls();
         }
         return;
       }
-      await sleep(900);
+      await sleep(1100);
       if (!state.autoplay) return;
       if (!(await runRow(next.number))) {
         stopAutoplay("Auto-play stopped on an error.");
         return;
       }
-      await sleep(1400);
+      await sleep(1700);
     }
   }
 
@@ -458,21 +509,55 @@
       return;
     }
     state.autoplay = true;
-    setText("autoplay-note", "Auto-play: local rows run in order and pause before every live row.");
+    setText("autoplay-note", "Auto-play: local steps run in order and pause before every live step.");
     updateControls();
     await continueAutoplay();
+  }
+
+  async function runAll() {
+    if (state.runningAll) {
+      state.runningAll = false;
+      setText("autoplay-note", "Run all will stop after the current step.");
+      updateControls();
+      return;
+    }
+    if (!state.session.run_all.enabled || state.busy) return;
+    state.runningAll = true;
+    setText("autoplay-note", "Running every step in order, including the live calls.");
+    updateControls();
+    for (let n = 1; n <= state.session.rows.length && state.runningAll; n += 1) {
+      const row = rowById(n);
+      if (row.result) continue;
+      if (row.live && state.session.trial_limit_reached) {
+        setText("autoplay-note", "The trial allowance is used up for today; the remaining live steps were not sent.");
+        break;
+      }
+      await selectRow(n);
+      await sleep(row.live ? 900 : 1100);
+      if (!state.runningAll) break;
+      if (!(await runRow(n))) {
+        setText("autoplay-note", "Run all stopped on an error at step " + n + ".");
+        break;
+      }
+      await sleep(row.live ? 2400 : 1700);
+    }
+    if (state.runningAll && !state.session.rows.some((row) => !row.result)) {
+      setText("autoplay-note", "All nine steps ran. Export the audit dossier below.");
+    }
+    state.runningAll = false;
+    updateControls();
   }
 
   async function step() {
     const next = state.session.rows.find((row) => !row.result);
     if (!next) {
-      setText("autoplay-note", "All nine requests ran.");
+      setText("autoplay-note", "All nine steps ran.");
       return;
     }
     await selectRow(next.number);
     if (next.live) {
-      setText("autoplay-note", next.available ? "Row " + next.number + " is live: click \u201cEvaluate row " + next.number + " live\u201d to send 1 request." :
-        "Row " + next.number + ": not evaluated, live required. Restart with --trial or --keyed.");
+      setText("autoplay-note", next.available ? "Step " + next.number + " is live: click \u201cEvaluate step " + next.number + " live\u201d to send 1 call." :
+        "Step " + next.number + " needs a live ramen ai evaluation. Restart with --trial or --keyed.");
       return;
     }
     await runRow(next.number);
@@ -499,12 +584,15 @@
     $("export-md").hidden = true;
     await refreshAll();
     await selectRow(1);
-    setText("autoplay-note", "New run: fresh issuers, configuration hash, journal and receipts.");
+    setText("autoplay-note", "New run: fresh signing keys, configuration hash, decision log and receipts.");
   }
 
-  // -- dossier ---------------------------------------------------------------
+  // -- audit trail -----------------------------------------------------------
 
   function cell(text, cls) { return el("td", { cls: cls || "", text: text === null || text === undefined ? "-" : text }); }
+  function resultCell(label, outcome) {
+    return el("td", null, labelChip(label, family(outcome)), el("p", { cls: "tech", text: outcome }));
+  }
 
   async function refreshJournal() {
     const res = await api("GET", "/api/journal");
@@ -513,7 +601,6 @@
     const body = $("journal-body");
     body.replaceChildren();
     for (const entry of journal.entries) {
-      const outcome = el("td", null, el("span", { cls: "chip " + family(entry.outcome), text: entry.outcome }));
       const detail = entry.codes.length ? entry.codes.join(", ") : entry.receipt_id ? entry.receipt_id + " (" + entry.receipt_class + ")" : "-";
       const prev = cell(short(entry.prev_sha256, 12), "mono");
       prev.title = entry.prev_sha256;
@@ -522,9 +609,8 @@
       body.append(el("tr", null,
         cell(entry.seq, "mono"),
         cell(entry.timestamp ? entry.timestamp.replace("T", " ").replace("+00:00", "") : "-", "mono"),
-        cell(entry.request_kind + (entry.rush ? " (rush)" : "")),
-        cell(entry.stage),
-        outcome,
+        el("td", null, el("span", { text: entry.request_kind + (entry.rush ? " (rush)" : "") }), el("p", { cls: "tech", text: entry.stage })),
+        resultCell(entry.label, entry.outcome),
         cell(detail, "mono"),
         prev,
         own,
@@ -533,14 +619,14 @@
     }
     const status = $("chain-status");
     if (!journal.entries.length) {
-      status.textContent = "No entries yet. Every decision, hold or release, is journaled here.";
+      status.textContent = "No entries yet. Every decision, stopped or approved, is recorded here.";
       status.className = "chain-status muted";
     } else if (journal.chain_ok) {
-      status.textContent = "Hash chain intact: " + journal.entries.length + " entries from genesis " + short(journal.anchor, 8) +
-        " to head " + short(journal.head, 16) + ". Each entry_sha256 covers the canonical entry; each prev_sha256 names the entry before it.";
+      status.textContent = "\u2713 Chain intact: " + plural(journal.entries.length, "decision") + " recorded, none edited, removed or reordered. " +
+        "Head " + short(journal.head, 16) + ".";
       status.className = "chain-status ok-text";
     } else {
-      status.textContent = "Hash chain broken: " + journal.problems.join("; ");
+      status.textContent = "\u2717 Chain broken: " + journal.problems.join("; ");
       status.className = "chain-status bad-text";
     }
   }
@@ -551,6 +637,7 @@
     const data = res.body;
     const body = $("receipt-body");
     body.replaceChildren();
+    const labels = state.session ? state.session.outcome_labels : {};
     for (const item of data.receipts) {
       const text = el("details", null, el("summary", { text: "show" }), el("pre", { text: item.input_text || "" }));
       body.append(el("tr", null,
@@ -559,20 +646,20 @@
         cell(item.schema_version ? "V" + String(item.schema_version).split(".")[0] : "-"),
         cell(item.receipt_class),
         cell(item.verdict),
-        el("td", null, el("span", { cls: "chip " + family(item.outcome), text: item.outcome })),
-        cell(item.verified ? "\u2713 Ed25519 signature and payload hash" : "\u2717 " + (item.problem || "did not verify"), item.verified ? "ok-text" : "bad-text"),
+        resultCell(labels[item.outcome] || item.outcome, item.outcome),
+        cell(item.verified ? "\u2713 signature and payload hash" : "\u2717 " + (item.problem || "did not verify"), item.verified ? "ok-text" : "bad-text"),
         el("td", null, text),
       ));
     }
     const status = $("receipt-status");
     if (!data.receipts.length) {
       status.textContent = state.session && state.session.mode === "local" ?
-        "No live evaluations in local mode. Rows 7 to 9 are not evaluated." : "No live evaluations in this run yet.";
+        "No live evaluations in the offline demo. Steps 7 to 9 run live with --trial or --keyed." : "No live evaluations in this run yet.";
       status.className = "chain-status muted";
     } else {
       const kids = [...new Set(data.receipts.map((item) => item.kid).filter(Boolean))].join(", ");
-      status.textContent = data.receipts.length + " Schema V5 receipts (" + data.production + " production, " + data.trial + " trial), " +
-        (data.all_verified ? "all re-verified offline under " + kids : "some did not verify");
+      status.textContent = (data.all_verified ? "\u2713 " : "\u2717 ") + plural(data.receipts.length, "signed receipt") + " (" + data.production + " production, " +
+        data.trial + " trial), " + (data.all_verified ? "all re-checked on this machine under " + kids + "." : "some did not verify.");
       status.className = "chain-status " + (data.all_verified ? "ok-text" : "bad-text");
     }
   }
@@ -582,10 +669,10 @@
     const markdown = $("export-md");
     box.replaceChildren();
     if (!res.ok) {
-      box.append(el("p", { cls: "bad-text", text: res.body.error === "dossier_refused" ? "Export refused." : res.body.detail || "Export failed." }));
+      box.append(el("p", { cls: "export-headline bad-text", text: res.body.error === "dossier_refused" ? "Export refused." : res.body.detail || "Export failed." }));
       if (Array.isArray(res.body.problems)) {
         const list = el("ul");
-        for (const problem of res.body.problems) list.append(el("li", { text: problem }));
+        for (const problem of res.body.problems) list.append(el("li", { cls: "tech", text: problem }));
         box.append(list);
       }
       if (res.body.hint) box.append(el("p", { cls: "note", text: res.body.hint }));
@@ -593,13 +680,15 @@
       return;
     }
     const d = res.body;
+    box.append(el("p", { cls: "export-headline " + (d.intact ? "ok-text" : "bad-text"),
+      text: d.intact ? "\u2713 Audit dossier exported and verified: nothing missing, nothing altered." : "\u2717 The exported dossier did not verify." }));
     const facts = el("dl");
     const add = (label, value, cls) => { facts.append(el("dt", { text: label }), el("dd", { cls: cls || "", text: value })); };
-    add("verify_dossier", d.intact ? "\u2713 intact: file digests, hash chain, journal-to-receipt join and every receipt re-verified" : "\u2717 " + d.verify.join("; "), d.intact ? "ok-text" : "bad-text");
-    add("Directory", d.path, "mono");
+    add("verify_dossier", d.intact ? "intact: file digests, hash chain, journal-to-receipt join and every receipt re-verified" : d.verify.join("; "), d.intact ? "ok-text" : "bad-text");
     add("Evidence", d.evidence_class ? "evidence_class: " + d.evidence_class : d.evidence_label, d.evidence_class === "trial" ? "warn-text" : "");
     add("Receipts", d.receipts.production + " production, " + d.receipts.trial + " trial");
     add("Decisions", d.decisions + " (" + Object.entries(d.by_outcome).map(([key, value]) => key + " " + value).join(", ") + ")");
+    add("Directory", d.path, "mono");
     add("Chain head", d.chain_head, "mono");
     for (const [name, digest] of Object.entries(d.files)) add(name, "sha256 " + digest, "mono");
     box.append(facts);
@@ -629,6 +718,7 @@
   async function init() {
     $("btn-autoplay").addEventListener("click", toggleAutoplay);
     $("btn-step").addEventListener("click", step);
+    $("btn-run-all").addEventListener("click", runAll);
     $("btn-reset").addEventListener("click", resetRun);
     $("btn-run").addEventListener("click", runSelected);
     $("btn-export").addEventListener("click", exportDossier);
@@ -638,9 +728,9 @@
       return;
     }
     const notes = {
-      local: "Local mode: rows 1 to 6 run on this machine with 0 requests; rows 7 to 9 are not evaluated.",
-      trial: "Trial mode: rows 7 to 9 each send one request to the keyless public trial when you click.",
-      keyed: "Keyed mode: rows 7 to 9 each send one request with RAMEN_API_KEY and return production receipts.",
+      local: "Offline demo: steps 1 to 6 run on this machine with no calls; steps 7 to 9 need a live ramen ai evaluation.",
+      trial: "Live demo on the keyless trial: steps 7 to 9 each send one call to ramen ai when you click.",
+      keyed: "Live demo with a production key: steps 7 to 9 each send one call and return production receipts.",
     };
     setText("autoplay-note", notes[state.session.mode] || "");
     const first = state.session.rows.find((row) => !row.result);
